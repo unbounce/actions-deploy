@@ -1,4 +1,5 @@
 import { Application, Context } from "probot";
+import adapt from 'probot-actions-adapter';
 import type { Octokit } from "@octokit/rest";
 
 const statusCheckContext = "QA";
@@ -22,7 +23,7 @@ const setCommitStatus = async (
   }
 };
 
-export = (app: Application) => {
+const app = (app: Application) => {
   // Additional app.on events will need to be added to the `on` section of .github/workflows/deployment.yml
   // https://help.github.com/en/actions/reference/events-that-trigger-workflows
 
@@ -30,3 +31,5 @@ export = (app: Application) => {
     await setCommitStatus(context, "pending");
   });
 };
+
+adapt(app);
