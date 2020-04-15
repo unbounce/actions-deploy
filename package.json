@@ -36,11 +36,5 @@
     "hooks": {
       "pre-commit": "lint-staged"
     }
-  },
-  "lint-staged": {
-    "*.{ts,tsx}": [
-      "tslint --config tslint.json --project tsconfig.json --fix",
-      "prettier --write"
-    ]
   }
 }
