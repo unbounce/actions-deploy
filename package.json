@@ -9,8 +9,8 @@
     "test:ci": "npm test -- --coverage",
     "lint": "tslint --project tsconfig.json",
     "lint:fix": "tslint --project tsconfig.json --fix",
-    "lint:format": "prettier --check 'src/**/*.ts' 'src/**/*.tsx'",
-    "format": "prettier --write 'src/**/*.ts' 'src/**/*.tsx'"
+    "lint:format": "prettier --check 'src/**/*.ts'",
+    "format": "prettier --write 'src/**/*.ts'"
   },
   "author": "",
   "license": "UNLICENSED",
@@ -38,7 +38,7 @@
     }
   },
   "lint-staged": {
-    "*.{ts,tsx}": [
+    "src/**/*.ts": [
       "tslint --config tslint.json --project tsconfig.json --fix",
       "prettier --write",
       "bash -c 'npm run build && git add dist/index.js'"
