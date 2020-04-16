@@ -26,6 +26,8 @@ jobs:
     - run: npm run lint:format
     - run: npm run lint
     - run: npm run test:ci
+    - run: npm run build
+    - run: git status -s | grep dist/index.js && echo '::warning Bundle file (dist/index.js) may not be up-to-date' || true
     - name: Fix Code Coverage Paths
       if: env.SONAR_TOKEN
       # https://community.sonarsource.com/t/code-coverage-doesnt-work-with-github-action/16747
