@@ -5,7 +5,7 @@
   "scripts": {
     "start": "ts-node src/index.ts",
     "build": "ncc build src/index.ts --out dist/",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "test:ci": "npm test -- --coverage",
     "lint": "tslint --config tslint.json --project tsconfig.json",
     "lint:fix": "tslint --config tslint.json --project tsconfig.json --fix",
