@@ -7,8 +7,8 @@
     "build": "ncc build src/index.ts --out dist/",
     "test": "jest",
     "test:ci": "npm test -- --coverage",
-    "lint": "tslint --project tsconfig.json",
-    "lint:fix": "tslint --project tsconfig.json --fix",
+    "lint": "tslint --config tslint.json --project tsconfig.json",
+    "lint:fix": "tslint --config tslint.json --project tsconfig.json --fix",
     "lint:format": "prettier --check 'src/**/*.ts'",
     "format": "prettier --write 'src/**/*.ts'"
   },
