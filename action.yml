@@ -4,6 +4,18 @@ inputs:
   type:
     description: 'The deployment type: ui, lambda, or kube'
     required: true
+  main-branch:
+    description: The name of the main branch for this repository
+    required: false
+    default: master
+  production-environment:
+    description: The name of the production environment
+    required: false
+    default: production
+  pre-production-environment:
+    description: The name of the pre-production environment
+    required: false
+    default: integration
 runs:
   using: node12
   main: dist/index.js
