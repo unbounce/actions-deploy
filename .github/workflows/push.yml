@@ -1,0 +1,41 @@
+on: push
+name: Push / PR Builder
+jobs:
+  tests:
+    name: Run Tests & Sonar Analysis
+    runs-on: ubuntu-latest
+    env:
+      GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+    - uses: actions/checkout@master
+    - name: Cache node modules
+      uses: actions/cache@v1
+      with:
+        path: ~/.npm # npm cache files are stored in `~/.npm` on Linux/macOS
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          ${{ runner.os }}-node-
+          ${{ runner.os }}-
+    - uses: actions/setup-node@v1
+      with:
+        node-version: 10.x
+    - run: npm ci
+    - run: npm audit --audit-level high
+    - run: npm run lint:format
+    - run: npm run lint
+    - run: npm run test:ci
+    - name: Fix Code Coverage Paths
+      if: env.SONAR_TOKEN
+      # https://community.sonarsource.com/t/code-coverage-doesnt-work-with-github-action/16747
+      working-directory: ./coverage
+      run: |
+        sed -i "s@${GITHUB_WORKSPACE}@/github/workspace/@g" lcov.info
+    - name: Analyze with SonarCloud
+      if: env.SONAR_TOKEN
+      uses: docker://unbounce/sonarcloud-github-action:stable
+      # ^ built from https://github.com/SonarSource/sonarcloud-github-action/tree/c7f7c25d4114527c3634c44d19d47674909b51b3
+      # equivalent to `uses: sonarsource/sonarcloud-github-action@master` but cached docker image so faster
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
