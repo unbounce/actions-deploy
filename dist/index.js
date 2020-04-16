@@ -25421,8 +25421,30 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const child_process_1 = __webpack_require__(129);
 const probot_actions_adapter_1 = __importDefault(__webpack_require__(875));
-const statusCheckContext = "QA";
+const config = {
+    statusCheckContext: "QA",
+    preProductionEnvironment: process.env.INPUT_PRE_PRODUCTION_ENVIRONMENT || "",
+    deploymentType: (process.env.INPUT_DEPLOYMENT_TYPE || ""),
+};
+// Utils
+// From https://github.com/probot/commands/blob/master/index.js
+const commandMatches = (context, match) => {
+    const { comment, issue, pull_request: pr } = context.payload;
+    const command = (comment || issue || pr).body.match(/^\/([\w]+)\b *(.*)?$/m);
+    return command && command[1] === match;
+};
+const createComment = (context, body) => {
+    const issueComment = context.issue({ body });
+    return context.github.issues.createComment(issueComment);
+};
+// GitHub Actions Annotations
+const warning = (message) => console.log(`::warning ${message}`);
+// const error = (message: string) => console.log(`::error ${message}`)
+const debug = (message) => console.log(`::debug ${message}`);
+// Config
+//
 const setCommitStatus = async (context, state) => {
     const pr = await context.github.pulls.get(context.issue());
     const { sha } = pr.data.head;
@@ -25430,18 +25452,115 @@ const setCommitStatus = async (context, state) => {
         return context.github.repos.createStatus(context.repo({
             sha,
             state,
-            context: statusCheckContext,
+            context: config.statusCheckContext,
         }));
     }
     else {
         return Promise.resolve();
     }
 };
+// Deployments
+const findDeployment = async (context, environment) => {
+    const deployments = await context.github.repos.listDeployments(context.repo({ environment }));
+    if (deployments.data.length > 0) {
+        return deployments.data[0];
+    }
+    else {
+        return undefined;
+    }
+};
+const setDeploymentStatus = (context, deploymentId, state) => context.github.repos.createDeploymentStatus(context.repo({ deployment_id: deploymentId, state }));
+const createDeployment = (context, ref, environment, payload) => context.github.repos.createDeployment(context.repo({
+    task: "deploy",
+    payload: JSON.stringify(payload),
+    required_contexts: [],
+    auto_merge: true,
+    environment,
+    ref,
+}));
+const deploymentPullRequestNumber = (deployment) => JSON.parse(deployment ? deployment.payload : "{}")
+    .pr;
+const environmentIsAvailable = (context, deployment) => {
+    if (deployment) {
+        const prNumber = deploymentPullRequestNumber(deployment);
+        if (prNumber) {
+            return prNumber === context.issue().number;
+        }
+        else {
+            return true;
+        }
+    }
+    else {
+        return true;
+    }
+};
+const handleDeploy = async (context, ref, environment, payload, commands) => {
+    // Resources created as part of an Action can not trigger other actions, so we
+    // can't handle the deployment as part of `app.on('deployment')`
+    const { data: { id }, } = await createDeployment(context, ref, environment, payload);
+    try {
+        for (const command of commands) {
+            await new Promise((resolve, reject) => {
+                // TODO stream output, shell escape deployCommand
+                child_process_1.exec(command, (error, stdout, stderr) => {
+                    if (stdout) {
+                        console.log(stdout);
+                    }
+                    if (stderr) {
+                        console.error(stderr);
+                    }
+                    if (error) {
+                        reject(error);
+                    }
+                    else {
+                        resolve();
+                    }
+                });
+            });
+        }
+        await setDeploymentStatus(context, id, "success");
+    }
+    catch (e) {
+        await setDeploymentStatus(context, id, "error");
+        throw e;
+    }
+};
+const deployCommands = {
+    npm: { deploy: "echo npm run deploy", release: "echo npm run release" },
+    make: { deploy: "echo make deploy", release: "echo make release" },
+};
 const probot = (app) => {
-    // Additional app.on events will need to be added to the `on` section of .github/workflows/deployment.yml
+    // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
     // https://help.github.com/en/actions/reference/events-that-trigger-workflows
     app.on(["pull_request.opened", "pull_request.reopened"], async (context) => {
         await setCommitStatus(context, "pending");
+    });
+    app.on(["issue_comment.created", "pull_request.opened"], async (context) => {
+        const pr = await context.github.pulls.get(context.issue());
+        if (pr) {
+            const ref = context.payload.pull_request.head.ref;
+            const environment = config.preProductionEnvironment;
+            const deployment = await findDeployment(context, environment);
+            if (commandMatches(context, "qa")) {
+                if (environmentIsAvailable(context, deployment)) {
+                    // Deploy
+                    const deployCommand = deployCommands[config.deploymentType];
+                    if (deployCommand) {
+                        handleDeploy(context, ref, environment, { pr: context.issue().number }, [deployCommand.release, deployCommand.deploy]);
+                    }
+                    else {
+                        warning(`No deploy command found for type ${config.deploymentType}`);
+                    }
+                }
+                else {
+                    const message = `#${deploymentPullRequestNumber(deployment)} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
+                    await createComment(context, message);
+                }
+            }
+        }
+        else {
+            debug(`No pull request associated with comment ${context.issue()}`);
+        }
     });
 };
 probot_actions_adapter_1.default(probot);
