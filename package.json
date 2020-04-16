@@ -36,5 +36,13 @@
     "hooks": {
       "pre-commit": "lint-staged"
     }
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "tslint --config tslint.json --project tsconfig.json --fix",
+      "prettier --write",
+      "bash -c 'npm run build && git add dist/index.js'"
+    ],
+    "package(-lock)?.json": ["bash -c 'npm run build && git add dist/index.js'"]
   }
 }
