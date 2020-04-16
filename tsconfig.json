@@ -1,0 +1,3 @@
+{
+  "extends": "@unbounce/commons-tsconfig-node/tsconfig.json"
+}

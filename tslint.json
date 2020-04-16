@@ -1,0 +1,7 @@
+{
+  "extends": "@unbounce/commons-tslint",
+  "rules": {
+    "no-implicit-dependencies": [true, ["aws-lambda"]],
+    "arrow-parens": false
+  }
+}
