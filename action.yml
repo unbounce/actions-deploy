@@ -1,0 +1,12 @@
+name: actions-deploy
+description: GitHub Actions-Based Release and Deployment
+inputs:
+  type:
+    description: 'The deployment type: ui, lambda, or kube'
+    required: true
+runs:
+  using: node12
+  main: dist/index.js
+branding:
+  icon: upload-cloud
+  color: blue
