@@ -25496,8 +25496,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const probot_actions_adapter_1 = __importDefault(__webpack_require__(875));
-const utils_1 = __webpack_require__(440);
 const logging_1 = __webpack_require__(376);
+const utils_1 = __webpack_require__(440);
 const probot = (app) => {
     // Additional app.on events will need to be added to the `on` section of .github/workflows/deployment.yml
     // https://help.github.com/en/actions/reference/events-that-trigger-workflows
@@ -25511,14 +25511,6 @@ const probot = (app) => {
             return;
         }
         switch (true) {
-            case utils_1.commandMatches(context, "qa"): {
-                // const ref = pr.data.head.ref;
-                // const environment = config.preProductionEnvironment;
-                // const deployment = await findDeployment(context, environment);
-                await utils_1.setCommitStatus(context, "pending");
-                // TODO
-                break;
-            }
             case utils_1.commandMatches(context, "skip-qa"): {
                 await Promise.all([
                     utils_1.setCommitStatus(context, "success"),
