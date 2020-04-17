@@ -48,8 +48,8 @@ const debug = (message: string) => console.log(`::debug ${message}`);
 
 const setCommitStatus = async (context: Context, state: CommitStatusState) => {
   const pr = await context.github.pulls.get(context.issue());
-  const { sha } = pr.data.head;
   if (pr) {
+    const { sha } = pr.data.head;
     return context.github.repos.createStatus(
       context.repo({
         sha,
@@ -174,7 +174,7 @@ const probot = (app: Application) => {
   app.on(["issue_comment.created", "pull_request.opened"], async (context) => {
     const pr = await context.github.pulls.get(context.issue());
     if (pr) {
-      const ref = context.payload.pull_request.head.ref;
+      const { sha } = pr.data.head;
       const environment = config.preProductionEnvironment;
       const deployment = await findDeployment(context, environment);
       if (commandMatches(context, "qa")) {
@@ -184,7 +184,7 @@ const probot = (app: Application) => {
           if (deployCommand) {
             handleDeploy(
               context,
-              ref,
+              sha,
               environment,
               { pr: context.issue().number },
               [deployCommand.release, deployCommand.deploy]

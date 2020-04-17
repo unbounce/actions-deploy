@@ -25447,8 +25447,8 @@ const debug = (message) => console.log(`::debug ${message}`);
 //
 const setCommitStatus = async (context, state) => {
     const pr = await context.github.pulls.get(context.issue());
-    const { sha } = pr.data.head;
     if (pr) {
+        const { sha } = pr.data.head;
         return context.github.repos.createStatus(context.repo({
             sha,
             state,
@@ -25538,7 +25538,7 @@ const probot = (app) => {
     app.on(["issue_comment.created", "pull_request.opened"], async (context) => {
         const pr = await context.github.pulls.get(context.issue());
         if (pr) {
-            const ref = context.payload.pull_request.head.ref;
+            const { sha } = pr.data.head;
             const environment = config.preProductionEnvironment;
             const deployment = await findDeployment(context, environment);
             if (commandMatches(context, "qa")) {
@@ -25546,7 +25546,7 @@ const probot = (app) => {
                     // Deploy
                     const deployCommand = deployCommands[config.deploymentType];
                     if (deployCommand) {
-                        handleDeploy(context, ref, environment, { pr: context.issue().number }, [deployCommand.release, deployCommand.deploy]);
+                        handleDeploy(context, sha, environment, { pr: context.issue().number }, [deployCommand.release, deployCommand.deploy]);
                     }
                     else {
                         warning(`No deploy command found for type ${config.deploymentType}`);
