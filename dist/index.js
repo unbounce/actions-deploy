@@ -25527,8 +25527,9 @@ const handleDeploy = async (context, ref, environment, payload, commands) => {
     }
 };
 const deployCommands = {
-    npm: { deploy: "echo npm run deploy", release: "echo npm run release" },
-    make: { deploy: "echo make deploy", release: "echo make release" },
+    ui: { deploy: "echo npm run deploy", release: "echo npm run release" },
+    lambda: { deploy: "echo npm run deploy", release: "echo npm run release" },
+    kube: { deploy: "echo make deploy", release: "echo make release" },
 };
 const probot = (app) => {
     // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
