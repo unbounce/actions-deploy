@@ -25527,9 +25527,17 @@ const handleDeploy = async (context, ref, environment, payload, commands) => {
     }
 };
 const deployCommands = {
-    ui: { deploy: "echo npm run deploy", release: "echo npm run release" },
-    lambda: { deploy: "echo npm run deploy", release: "echo npm run release" },
-    kube: { deploy: "echo make deploy", release: "echo make release" },
+    ui: {
+        release: (version) => [
+            "echo npm run ub-preversion-checks",
+            `echo sed 's/"version":\s*"[^"]*"/"version": "${version}"/' package.json`,
+            "echo npm run ub-upload-ui",
+            "echo npm run ub-postversion-checks",
+        ],
+        deploy: (version, environment) => [
+            `echo npm run deploy -- --environment ${environment} --version ${version}`,
+        ],
+    },
 };
 const probot = (app) => {
     // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
@@ -25548,7 +25556,9 @@ const probot = (app) => {
                     // Deploy
                     const deployCommand = deployCommands[config.deploymentType];
                     if (deployCommand) {
-                        handleDeploy(context, sha, environment, { pr: context.issue().number }, [deployCommand.release, deployCommand.deploy]);
+                        handleDeploy(context, sha, environment, { pr: context.issue().number }, deployCommand
+                            .release(sha)
+                            .concat(deployCommand.deploy(sha, environment)));
                     }
                     else {
                         warning(`No deploy command found for type ${config.deploymentType}`);

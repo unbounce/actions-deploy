@@ -15,7 +15,7 @@ type DeploymentStatusState = NonNullable<
   UnwrapList<Parameters<GitHubAPI["repos"]["createDeploymentStatus"]>>
 >["state"];
 
-type DeploymentType = "ui" | "lambda" | "kube";
+type DeploymentType = "ui"; // | "lambda" | "kube";
 
 const config = {
   statusCheckContext: "QA",
@@ -158,11 +158,22 @@ const handleDeploy = async (
 };
 
 const deployCommands: {
-  [K in DeploymentType]: { deploy: string; release: string };
+  [K in DeploymentType]: {
+    release: (version: string) => string[];
+    deploy: (version: string, environment: string) => string[];
+  };
 } = {
-  ui: { deploy: "echo npm run deploy", release: "echo npm run release" },
-  lambda: { deploy: "echo npm run deploy", release: "echo npm run release" },
-  kube: { deploy: "echo make deploy", release: "echo make release" },
+  ui: {
+    release: (version: string) => [
+      "echo npm run ub-preversion-checks",
+      `echo sed 's/"version":\s*"[^"]*"/"version": "${version}"/' package.json`,
+      "echo npm run ub-upload-ui",
+      "echo npm run ub-postversion-checks",
+    ],
+    deploy: (version: string, environment: string) => [
+      `echo npm run deploy -- --environment ${environment} --version ${version}`,
+    ],
+  },
 };
 
 const probot = (app: Application) => {
@@ -189,7 +200,9 @@ const probot = (app: Application) => {
               sha,
               environment,
               { pr: context.issue().number },
-              [deployCommand.release, deployCommand.deploy]
+              deployCommand
+                .release(sha)
+                .concat(deployCommand.deploy(sha, environment))
             );
           } else {
             warning(
