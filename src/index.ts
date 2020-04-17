@@ -19,8 +19,9 @@ type DeploymentType = "npm" | "make";
 
 const config = {
   statusCheckContext: "QA",
+  productionEnvironment: process.env.INPUT_PRODUCTION_ENVIRONMENT || "",
   preProductionEnvironment: process.env.INPUT_PRE_PRODUCTION_ENVIRONMENT || "",
-  deploymentType: (process.env.INPUT_DEPLOYMENT_TYPE || "") as DeploymentType,
+  deploymentType: (process.env.INPUT_TYPE || "") as DeploymentType,
 };
 
 // Utils

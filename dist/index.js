@@ -25425,8 +25425,9 @@ const child_process_1 = __webpack_require__(129);
 const probot_actions_adapter_1 = __importDefault(__webpack_require__(875));
 const config = {
     statusCheckContext: "QA",
+    productionEnvironment: process.env.INPUT_PRODUCTION_ENVIRONMENT || "",
     preProductionEnvironment: process.env.INPUT_PRE_PRODUCTION_ENVIRONMENT || "",
-    deploymentType: (process.env.INPUT_DEPLOYMENT_TYPE || ""),
+    deploymentType: (process.env.INPUT_TYPE || ""),
 };
 // Utils
 // From https://github.com/probot/commands/blob/master/index.js
