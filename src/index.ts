@@ -29,7 +29,7 @@ const probot = (app: Application) => {
       }
 
       default: {
-        debug("Unknown command");
+        debug("Unknown command", context);
       }
     }
   });

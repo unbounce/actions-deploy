@@ -1,5 +1,20 @@
-// GitHub Actions Annotations
+const prettyStringify = (thing: any) => {
+  if (typeof thing === "object") {
+    try {
+      return JSON.stringify(thing, null, 2);
+    } catch (ex) {
+      // move on
+    }
+  }
 
-export const warning = (message: string) => console.log(`::warning ${message}`);
-export const error = (message: string) => console.log(`::error ${message}`);
-export const debug = (message: string) => console.log(`::debug ${message}`);
+  return String(thing);
+};
+
+const stringifyArgs = (...args: any[]) => args.map(prettyStringify).join("\n");
+
+export const warning = (...args: any[]) =>
+  console.log(`::warning ${stringifyArgs(args)}`);
+export const error = (...args: any[]) =>
+  console.log(`::error ${stringifyArgs(args)}`);
+export const debug = (...args: any[]) =>
+  console.log(`::debug ${stringifyArgs(args)}`);

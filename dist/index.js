@@ -25519,7 +25519,7 @@ const probot = (app) => {
                 break;
             }
             default: {
-                logging_1.debug("Unknown command");
+                logging_1.debug("Unknown command", context);
             }
         }
     });
@@ -28626,11 +28626,22 @@ function pathtoRegexp(path, keys, options) {
 
 "use strict";
 
-// GitHub Actions Annotations
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.warning = (message) => console.log(`::warning ${message}`);
-exports.error = (message) => console.log(`::error ${message}`);
-exports.debug = (message) => console.log(`::debug ${message}`);
+const prettyStringify = (thing) => {
+    if (typeof thing === "object") {
+        try {
+            return JSON.stringify(thing, null, 2);
+        }
+        catch (ex) {
+            // move on
+        }
+    }
+    return String(thing);
+};
+const stringifyArgs = (...args) => args.map(prettyStringify).join("\n");
+exports.warning = (...args) => console.log(`::warning ${stringifyArgs(args)}`);
+exports.error = (...args) => console.log(`::error ${stringifyArgs(args)}`);
+exports.debug = (...args) => console.log(`::debug ${stringifyArgs(args)}`);
 
 
 /***/ }),
