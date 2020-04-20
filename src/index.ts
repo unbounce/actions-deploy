@@ -1,4 +1,4 @@
-import { exec } from "child_process";
+import { spawn } from "child_process";
 import { Application, Context, GitHubAPI } from "probot";
 import adapt from "probot-actions-adapter";
 
@@ -15,16 +15,22 @@ type DeploymentStatusState = NonNullable<
   UnwrapList<Parameters<GitHubAPI["repos"]["createDeploymentStatus"]>>
 >["state"];
 
-type DeploymentType = "ui"; // | "lambda" | "kube";
+const input = (name: string) => {
+  const envName = name.toUpperCase().replace("-", "_");
+  const value = process.env[envName];
+  if (typeof value === "undefined") {
+    throw new Error(`Input ${name} was not provided`);
+  }
+  return value;
+};
 
 const config = {
   statusCheckContext: "QA",
-  productionEnvironment: process.env.INPUT_PRODUCTION_ENVIRONMENT || "",
-  preProductionEnvironment: process.env.INPUT_PRE_PRODUCTION_ENVIRONMENT || "",
-  deploymentType: (process.env.INPUT_TYPE || "") as DeploymentType,
+  productionEnvironment: input("production-environment"),
+  preProductionEnvironment: input("pre-production-environment"),
+  deployCommand: input("deploy"),
+  releaseCommand: input("release"),
 };
-
-// Utils
 
 // From https://github.com/probot/commands/blob/master/index.js
 const commandMatches = (context: Context, match: string): boolean => {
@@ -39,13 +45,9 @@ const createComment = (context: Context, body: string) => {
 };
 
 // GitHub Actions Annotations
-const warning = (message: string) => console.log(`::warning ${message}`);
+// const warning = (message: string) => console.log(`::warning ${message}`);
 // const error = (message: string) => console.log(`::error ${message}`)
 const debug = (message: string) => console.log(`::debug ${message}`);
-
-// Config
-
-//
 
 const setCommitStatus = async (context: Context, state: CommitStatusState) => {
   const pr = await context.github.pulls.get(context.issue());
@@ -121,7 +123,7 @@ const environmentIsAvailable = (context: Context, deployment?: Deployment) => {
 
 const handleDeploy = async (
   context: Context,
-  ref: string,
+  version: string,
   environment: string,
   payload: object,
   commands: string[]
@@ -130,50 +132,32 @@ const handleDeploy = async (
   // can't handle the deployment as part of `app.on('deployment')`
   const {
     data: { id },
-  } = await createDeployment(context, ref, environment, payload);
+  } = await createDeployment(context, version, environment, payload);
   try {
-    for (const command of commands) {
-      await new Promise((resolve, reject) => {
-        // TODO stream output, shell escape deployCommand
-        exec(command, (error, stdout, stderr) => {
-          if (stdout) {
-            console.log(stdout);
-          }
-          if (stderr) {
-            console.error(stderr);
-          }
-          if (error) {
-            reject(error);
-          } else {
-            resolve();
-          }
-        });
+    await new Promise((resolve, reject) => {
+      const env = {
+        ...process.env,
+        VERSION: version,
+        ENVIRONMENT: environment,
+      };
+      const options = { env, shell: "/bin/bash -e -x", cwd: process.cwd() };
+      // TODO shell escape command
+      const child = spawn(commands.join("\n"), options);
+      child.stdout.on("data", console.log);
+      child.stderr.on("data", console.error);
+      child.on("exit", (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`Deploy command exited with status code ${code}`));
+        }
       });
-    }
+    });
     await setDeploymentStatus(context, id, "success");
   } catch (e) {
     await setDeploymentStatus(context, id, "error");
     throw e;
   }
-};
-
-const deployCommands: {
-  [K in DeploymentType]: {
-    release: (version: string) => string[];
-    deploy: (version: string, environment: string) => string[];
-  };
-} = {
-  ui: {
-    release: (version: string) => [
-      "echo npm run ub-preversion-checks",
-      `echo sed 's/"version":\s*"[^"]*"/"version": "${version}"/' package.json`,
-      "echo npm run ub-upload-ui",
-      "echo npm run ub-postversion-checks",
-    ],
-    deploy: (version: string, environment: string) => [
-      `echo npm run deploy -- --environment ${environment} --version ${version}`,
-    ],
-  },
 };
 
 const probot = (app: Application) => {
@@ -192,27 +176,16 @@ const probot = (app: Application) => {
       const deployment = await findDeployment(context, environment);
       if (commandMatches(context, "qa")) {
         if (environmentIsAvailable(context, deployment)) {
-          // Deploy
-          const deployCommand = deployCommands[config.deploymentType];
-          if (deployCommand) {
-            handleDeploy(
-              context,
-              sha,
-              environment,
-              { pr: context.issue().number },
-              deployCommand
-                .release(sha)
-                .concat(deployCommand.deploy(sha, environment))
-            );
-          } else {
-            warning(
-              `No deploy command found for type ${config.deploymentType}`
-            );
-          }
+          await handleDeploy(
+            context,
+            sha,
+            environment,
+            { pr: context.issue().number },
+            [config.releaseCommand, config.deployCommand]
+          );
         } else {
-          const message = `#${deploymentPullRequestNumber(
-            deployment
-          )} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
+          const prNumber = deploymentPullRequestNumber(deployment);
+          const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
           await createComment(context, message);
         }
       }
