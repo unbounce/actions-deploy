@@ -25508,11 +25508,15 @@ const handleDeploy = async (context, version, environment, payload, commands) =>
     try {
         await new Promise((resolve, reject) => {
             const env = Object.assign(Object.assign({}, process.env), { VERSION: version, ENVIRONMENT: environment });
-            const options = { env, shell: "/bin/bash -e -x", cwd: process.cwd() };
+            const options = { env, cwd: process.cwd() };
             // TODO shell escape command
-            const child = child_process_1.spawn(commands.join("\n"), options);
+            const child = child_process_1.spawn("bash", ["-e", "-x", "-c", commands.join("\n")], options);
             child.stdout.on("data", console.log);
             child.stderr.on("data", console.error);
+            child.on("error", (error) => {
+                console.error(error);
+                reject(error);
+            });
             child.on("exit", (code) => {
                 if (code === 0) {
                     resolve();
