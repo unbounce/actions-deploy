@@ -25566,6 +25566,7 @@ const probot = (app) => {
                         await handleDeploy(context, sha, environment, { pr: context.issue().number }, [
                             `git fetch origin ${sha}:refs/remotes/origin/${ref}`,
                             `git checkout ${ref}`,
+                            `export RELEASE_BRANCH=${ref}`,
                             config.releaseCommand,
                             config.deployCommand,
                         ]);

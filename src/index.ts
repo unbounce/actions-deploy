@@ -210,6 +210,7 @@ const probot = (app: Application) => {
               [
                 `git fetch origin ${sha}:refs/remotes/origin/${ref}`,
                 `git checkout ${ref}`,
+                `export RELEASE_BRANCH=${ref}`,
                 config.releaseCommand,
                 config.deployCommand,
               ]
