@@ -186,7 +186,7 @@ const probot = (app: Application) => {
   app.on(["issue_comment.created", "pull_request.opened"], async (context) => {
     const pr = await context.github.pulls.get(context.issue());
     if (pr) {
-      const { sha } = pr.data.head;
+      const { sha, ref } = pr.data.head;
       const environment = config.preProductionEnvironment;
       const deployment = await findDeployment(context, environment);
       if (commandMatches(context, "qa")) {
@@ -199,8 +199,8 @@ const probot = (app: Application) => {
               environment,
               { pr: context.issue().number },
               [
-                `git fetch origin ${sha}:refs/remotes/origin/temp-${sha}`,
-                `git checkout origin/temp-${sha}`,
+                `git fetch origin ${sha}:refs/remotes/origin/${ref}`,
+                `git checkout ${ref}`,
                 config.releaseCommand,
                 config.deployCommand,
               ]
