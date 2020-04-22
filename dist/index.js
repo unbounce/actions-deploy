@@ -25450,7 +25450,7 @@ const createComment = (context, body) => {
 };
 // GitHub Actions Annotations
 // const warning = (message: string) => console.log(`::warning ${message}`);
-// const error = (message: string) => console.log(`::error ${message}`)
+const error = (message) => console.log(`::error ${message}`);
 const debug = (message) => console.log(`::debug ${message}`);
 const setCommitStatus = async (context, state) => {
     const pr = await context.github.pulls.get(context.issue());
@@ -25511,11 +25511,10 @@ const handleDeploy = async (context, version, environment, payload, commands) =>
             const options = { env, cwd: process.cwd() };
             // TODO shell escape command
             const child = child_process_1.spawn("bash", ["-e", "-x", "-c", commands.join("\n")], options);
-            child.stdout.on("data", console.log);
-            child.stderr.on("data", console.error);
-            child.on("error", (error) => {
-                console.error(error);
-                reject(error);
+            child.stdout.on("data", (data) => console.log(data.toString()));
+            child.stderr.on("data", (data) => console.error(data.toString()));
+            child.on("error", (e) => {
+                reject(e);
             });
             child.on("exit", (code) => {
                 if (code === 0) {
@@ -25548,7 +25547,16 @@ const probot = (app) => {
             if (commandMatches(context, "qa")) {
                 if (environmentIsAvailable(context, deployment)) {
                     // TODO check if PR is behind master
-                    await handleDeploy(context, sha, environment, { pr: context.issue().number }, [`git checkout ${sha}`, config.releaseCommand, config.deployCommand]);
+                    try {
+                        await handleDeploy(context, sha, environment, { pr: context.issue().number }, [
+                            `git checkout ${sha}`,
+                            config.releaseCommand,
+                            config.deployCommand,
+                        ]);
+                    }
+                    catch (e) {
+                        error(`Release and deploy to ${environment} failed: ${e}`);
+                    }
                 }
                 else {
                     const prNumber = deploymentPullRequestNumber(deployment);

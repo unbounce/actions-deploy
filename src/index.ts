@@ -46,7 +46,7 @@ const createComment = (context: Context, body: string) => {
 
 // GitHub Actions Annotations
 // const warning = (message: string) => console.log(`::warning ${message}`);
-// const error = (message: string) => console.log(`::error ${message}`)
+const error = (message: string) => console.log(`::error ${message}`);
 const debug = (message: string) => console.log(`::debug ${message}`);
 
 const setCommitStatus = async (context: Context, state: CommitStatusState) => {
@@ -147,11 +147,10 @@ const handleDeploy = async (
         ["-e", "-x", "-c", commands.join("\n")],
         options
       );
-      child.stdout.on("data", console.log);
-      child.stderr.on("data", console.error);
-      child.on("error", (error) => {
-        console.error(error);
-        reject(error);
+      child.stdout.on("data", (data) => console.log(data.toString()));
+      child.stderr.on("data", (data) => console.error(data.toString()));
+      child.on("error", (e) => {
+        reject(e);
       });
       child.on("exit", (code) => {
         if (code === 0) {
@@ -185,13 +184,21 @@ const probot = (app: Application) => {
       if (commandMatches(context, "qa")) {
         if (environmentIsAvailable(context, deployment)) {
           // TODO check if PR is behind master
-          await handleDeploy(
-            context,
-            sha,
-            environment,
-            { pr: context.issue().number },
-            [`git checkout ${sha}`, config.releaseCommand, config.deployCommand]
-          );
+          try {
+            await handleDeploy(
+              context,
+              sha,
+              environment,
+              { pr: context.issue().number },
+              [
+                `git checkout ${sha}`,
+                config.releaseCommand,
+                config.deployCommand,
+              ]
+            );
+          } catch (e) {
+            error(`Release and deploy to ${environment} failed: ${e}`);
+          }
         } else {
           const prNumber = deploymentPullRequestNumber(deployment);
           const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
