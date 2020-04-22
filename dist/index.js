@@ -25549,7 +25549,8 @@ const probot = (app) => {
                     // TODO check if PR is behind master
                     try {
                         await handleDeploy(context, sha, environment, { pr: context.issue().number }, [
-                            `git checkout ${sha}`,
+                            `git fetch origin ${sha}:refs/remotes/origin/temp-${sha}`,
+                            `git checkout origin/temp-${sha}`,
                             config.releaseCommand,
                             config.deployCommand,
                         ]);

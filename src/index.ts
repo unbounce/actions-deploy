@@ -191,7 +191,8 @@ const probot = (app: Application) => {
               environment,
               { pr: context.issue().number },
               [
-                `git checkout ${sha}`,
+                `git fetch origin ${sha}:refs/remotes/origin/temp-${sha}`,
+                `git checkout origin/temp-${sha}`,
                 config.releaseCommand,
                 config.deployCommand,
               ]
