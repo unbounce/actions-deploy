@@ -25449,9 +25449,9 @@ const createComment = (context, body) => {
     return context.github.issues.createComment(issueComment);
 };
 // GitHub Actions Annotations
-// const warning = (message: string) => console.log(`##warning ${message}`);
-const error = (message) => console.log(`##error ${message}`);
-const debug = (message) => console.log(`##debug ${message}`);
+// const warning = (message: string) => console.log(`::warning::${message}`);
+const error = (message) => console.log(`::error::${message}`);
+const debug = (message) => console.log(`::debug::${message}`);
 const errorMessage = (e) => {
     if (e instanceof Error && e.message) {
         return e.message;
