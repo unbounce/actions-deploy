@@ -25424,6 +25424,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const child_process_1 = __webpack_require__(129);
 const probot_actions_adapter_1 = __importDefault(__webpack_require__(875));
 const input = (name) => {
+    console.log(process.env);
     const envName = name.toUpperCase().replace("-", "_");
     const value = process.env[envName];
     if (typeof value === "undefined") {

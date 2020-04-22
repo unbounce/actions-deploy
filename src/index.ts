@@ -16,6 +16,7 @@ type DeploymentStatusState = NonNullable<
 >["state"];
 
 const input = (name: string) => {
+  console.log(process.env);
   const envName = name.toUpperCase().replace("-", "_");
   const value = process.env[envName];
   if (typeof value === "undefined") {
