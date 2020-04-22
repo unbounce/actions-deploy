@@ -25460,6 +25460,10 @@ const errorMessage = (e) => {
         return e.toString();
     }
 };
+const githubActionLink = (text) => {
+    const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/runs/${process.env.GITHUB_RUN_ID}?check_suite_focus=true`;
+    return `[${text}](${url})`;
+};
 const setCommitStatus = async (context, state) => {
     const pr = await context.github.pulls.get(context.issue());
     if (pr) {
@@ -25565,7 +25569,7 @@ const probot = (app) => {
                     }
                     catch (e) {
                         const message = `Release and deploy to ${environment} failed: ${errorMessage(e)}`;
-                        await createComment(context, message);
+                        await createComment(context, `${message} (${githubActionLink("View logs")})`);
                         error(message);
                     }
                 }
