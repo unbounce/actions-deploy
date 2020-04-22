@@ -1,4 +1,4 @@
-import { spawn } from "child_process";
+import { spawn, exec } from "child_process";
 import { Application, Context, GitHubAPI } from "probot";
 import adapt from "probot-actions-adapter";
 
@@ -7,6 +7,9 @@ type UnwrapPromise<T> = T extends Promise<infer U> ? U : T;
 type UnwrapList<T> = T extends Array<infer U> ? U : T;
 type Deployment = UnwrapList<
   UnwrapPromise<ReturnType<GitHubAPI["repos"]["listDeployments"]>>["data"]
+>;
+type PullRequest = UnwrapList<
+  UnwrapPromise<ReturnType<GitHubAPI["pulls"]["get"]>>["data"]
 >;
 type CommitStatusState = NonNullable<
   UnwrapList<Parameters<GitHubAPI["repos"]["createStatus"]>>
@@ -138,6 +141,55 @@ const environmentIsAvailable = (context: Context, deployment?: Deployment) => {
   }
 };
 
+const shell = async (
+  commands: string[],
+  extraEnv: Record<string, string> = {}
+) => {
+  return new Promise((resolve, reject) => {
+    const env = {
+      ...process.env,
+      ...extraEnv,
+    };
+    const options = { env, cwd: process.cwd() };
+    // TODO shell escape command
+    const child = spawn(
+      "bash",
+      ["-e", "-x", "-c", commands.join("\n")],
+      options
+    );
+    child.stdout.on("data", (data) => console.log(data.toString()));
+    child.stderr.on("data", (data) => console.error(data.toString()));
+    child.on("error", (e) => {
+      reject(e);
+    });
+    child.on("exit", (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`Deploy command exited with status code ${code}`));
+      }
+    });
+  });
+};
+
+const shellOutput = (command: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    exec(command, (e, stdout, stderr) => {
+      if (stderr) {
+        console.error(stderr);
+      }
+      if (stdout) {
+        console.log(stdout);
+      }
+      if (e) {
+        reject(e);
+      } else {
+        resolve(stdout);
+      }
+    });
+  });
+};
+
 const handleDeploy = async (
   context: Context,
   version: string,
@@ -151,38 +203,28 @@ const handleDeploy = async (
     data: { id },
   } = await createDeployment(context, version, environment, payload);
   try {
-    await new Promise((resolve, reject) => {
-      const env = {
-        ...process.env,
-        VERSION: version,
-        ENVIRONMENT: environment,
-      };
-      const options = { env, cwd: process.cwd() };
-      // TODO shell escape command
-      const child = spawn(
-        "bash",
-        ["-e", "-x", "-c", commands.join("\n")],
-        options
-      );
-      child.stdout.on("data", (data) => console.log(data.toString()));
-      child.stderr.on("data", (data) => console.error(data.toString()));
-      child.on("error", (e) => {
-        reject(e);
-      });
-      child.on("exit", (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`Deploy command exited with status code ${code}`));
-        }
-      });
-    });
+    const env = {
+      VERSION: version,
+      ENVIRONMENT: environment,
+    };
+    await shell(commands, env);
     await setDeploymentStatus(context, id, "success");
   } catch (e) {
     await setDeploymentStatus(context, id, "error");
     throw e;
   }
 };
+
+const checkoutPullRequest = (pr: PullRequest) => {
+  const { sha, ref } = pr.head;
+  return shell([
+    `git fetch origin ${sha}:refs/remotes/origin/${ref}`,
+    `git checkout ${ref}`,
+  ]);
+};
+
+const getShortCommit = () =>
+  shellOutput("git rev-parse --short HEAD").then((s) => s.toString().trim());
 
 const probot = (app: Application) => {
   // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
@@ -195,21 +237,20 @@ const probot = (app: Application) => {
   app.on(["issue_comment.created", "pull_request.opened"], async (context) => {
     const pr = await context.github.pulls.get(context.issue());
     if (pr) {
-      const { sha, ref } = pr.data.head;
       const environment = config.preProductionEnvironment;
       const deployment = await findDeployment(context, environment);
       if (commandMatches(context, "qa")) {
         if (environmentIsAvailable(context, deployment)) {
-          // TODO check if PR is behind master
           try {
+            const { ref } = pr.data.head;
+            await checkoutPullRequest(pr.data);
+            const version = await getShortCommit();
             await handleDeploy(
               context,
-              sha,
+              version,
               environment,
               { pr: context.issue().number },
               [
-                `git fetch origin ${sha}:refs/remotes/origin/${ref}`,
-                `git checkout ${ref}`,
                 `export RELEASE_BRANCH=${ref}`,
                 config.releaseCommand,
                 config.deployCommand,
