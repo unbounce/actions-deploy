@@ -16,8 +16,7 @@ type DeploymentStatusState = NonNullable<
 >["state"];
 
 const input = (name: string) => {
-  console.log(process.env);
-  const envName = name.toUpperCase().replace("-", "_");
+  const envName = `INPUT_${name}`.toUpperCase().replace(" ", "_");
   const value = process.env[envName];
   if (typeof value === "undefined") {
     throw new Error(`Input ${name} was not provided`);
