@@ -25448,6 +25448,9 @@ const createComment = (context, body) => {
     const issueComment = context.issue({ body });
     return context.github.issues.createComment(issueComment);
 };
+const createCommentWithMention = (context, body) => {
+    return createComment(context, `@${process.env.GITHUB_ACTOR} ${body}`);
+};
 // GitHub Actions Annotations
 // const warning = (message: string) => console.log(`::warning::${message}`);
 const error = (message) => console.log(`::error::${message}`);
@@ -25568,15 +25571,15 @@ const probot = (app) => {
                         ]);
                     }
                     catch (e) {
-                        const message = `Release and deploy to ${environment} failed: ${errorMessage(e)}`;
-                        await createComment(context, `${message} (${githubActionLink("View logs")})`);
+                        const message = `release and deploy to ${environment} failed: ${errorMessage(e)}`;
+                        await createCommentWithMention(context, `${message} (${githubActionLink("View logs")})`);
                         error(message);
                     }
                 }
                 else {
                     const prNumber = deploymentPullRequestNumber(deployment);
                     const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
-                    await createComment(context, message);
+                    await createCommentWithMention(context, message);
                     error(message);
                 }
             }
