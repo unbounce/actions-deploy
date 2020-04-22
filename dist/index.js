@@ -25543,7 +25543,8 @@ const probot = (app) => {
             const deployment = await findDeployment(context, environment);
             if (commandMatches(context, "qa")) {
                 if (environmentIsAvailable(context, deployment)) {
-                    await handleDeploy(context, sha, environment, { pr: context.issue().number }, [config.releaseCommand, config.deployCommand]);
+                    // TODO check if PR is behind master
+                    await handleDeploy(context, sha, environment, { pr: context.issue().number }, [`git checkout ${sha}`, config.releaseCommand, config.deployCommand]);
                 }
                 else {
                     const prNumber = deploymentPullRequestNumber(deployment);
