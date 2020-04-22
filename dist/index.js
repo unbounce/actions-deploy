@@ -25464,7 +25464,7 @@ const errorMessage = (e) => {
     }
 };
 const githubActionLink = (text) => {
-    const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/runs/${process.env.GITHUB_RUN_NUMBER}?check_suite_focus=true`;
+    const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/runs/${process.env.GITHUB_ACTION}?check_suite_focus=true`;
     return `[${text}](${url})`;
 };
 const setCommitStatus = async (context, state) => {
