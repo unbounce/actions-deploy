@@ -45,9 +45,17 @@ const createComment = (context: Context, body: string) => {
 };
 
 // GitHub Actions Annotations
-// const warning = (message: string) => console.log(`::warning ${message}`);
-const error = (message: string) => console.log(`::error ${message}`);
-const debug = (message: string) => console.log(`::debug ${message}`);
+// const warning = (message: string) => console.log(`##warning ${message}`);
+const error = (message: string) => console.log(`##error ${message}`);
+const debug = (message: string) => console.log(`##debug ${message}`);
+
+const errorMessage = (e: any) => {
+  if (e instanceof Error && e.message) {
+    return e.message;
+  } else {
+    return e.toString();
+  }
+};
 
 const setCommitStatus = async (context: Context, state: CommitStatusState) => {
   const pr = await context.github.pulls.get(context.issue());
@@ -198,12 +206,17 @@ const probot = (app: Application) => {
               ]
             );
           } catch (e) {
-            error(`Release and deploy to ${environment} failed: ${e}`);
+            const message = `Release and deploy to ${environment} failed: ${errorMessage(
+              e
+            )}`;
+            await createComment(context, message);
+            error(message);
           }
         } else {
           const prNumber = deploymentPullRequestNumber(deployment);
           const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
           await createComment(context, message);
+          error(message);
         }
       }
     } else {
