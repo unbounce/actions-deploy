@@ -1661,7 +1661,25 @@ function parseOptions(options, log, hook) {
 
 
 /***/ }),
-/* 38 */,
+/* 38 */
+/***/ (function(__unusedmodule, exports) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.details = (summary, body) => {
+    return `<details><summary>${summary}</summary>${body}</details>`;
+};
+exports.mention = () => {
+    return `@${process.env.GITHUB_ACTOR} `;
+};
+exports.codeBlock = (body) => {
+    const ticks = "```";
+    return `${ticks}${body}${ticks}`;
+};
+
+
+/***/ }),
 /* 39 */
 /***/ (function(module) {
 
@@ -25420,9 +25438,17 @@ module.exports = Bottleneck;
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const child_process_1 = __webpack_require__(129);
 const probot_actions_adapter_1 = __importDefault(__webpack_require__(875));
+const comment = __importStar(__webpack_require__(38));
 const input = (name) => {
     const envName = `INPUT_${name}`.toUpperCase().replace(" ", "_");
     const value = process.env[envName];
@@ -25440,16 +25466,14 @@ const config = {
 };
 // From https://github.com/probot/commands/blob/master/index.js
 const commandMatches = (context, match) => {
+    // tslint:disable:no-shadowed-variable
     const { comment, issue, pull_request: pr } = context.payload;
     const command = (comment || issue || pr).body.match(/^\/([\w]+)\b *(.*)?$/m);
     return command && command[1] === match;
 };
 const createComment = (context, body) => {
-    const issueComment = context.issue({ body });
+    const issueComment = context.issue({ body: body.join("\n") });
     return context.github.issues.createComment(issueComment);
-};
-const createCommentWithMention = (context, body) => {
-    return createComment(context, `@${process.env.GITHUB_ACTOR} ${body}`);
 };
 // GitHub Actions Annotations
 // const warning = (message: string) => console.log(`::warning::${message}`);
@@ -25516,23 +25540,39 @@ const environmentIsAvailable = (context, deployment) => {
         return true;
     }
 };
+class ShellError extends Error {
+    constructor(message, output) {
+        super(message);
+        this.message = message;
+        this.output = output;
+    }
+}
 const shell = async (commands, extraEnv = {}) => {
+    const output = [];
     return new Promise((resolve, reject) => {
         const env = Object.assign(Object.assign({}, process.env), extraEnv);
         const options = { env, cwd: process.cwd() };
         // TODO shell escape command
         const child = child_process_1.spawn("bash", ["-e", "-x", "-c", commands.join("\n")], options);
-        child.stdout.on("data", (data) => console.log(data.toString()));
-        child.stderr.on("data", (data) => console.error(data.toString()));
+        child.stdout.on("data", (data) => {
+            const str = data.toString();
+            output.push(str);
+            console.log(str);
+        });
+        child.stderr.on("data", (data) => {
+            const str = data.toString();
+            output.push(str);
+            console.error(str);
+        });
         child.on("error", (e) => {
             reject(e);
         });
         child.on("exit", (code) => {
             if (code === 0) {
-                resolve();
+                resolve(output.join("\n"));
             }
             else {
-                reject(new Error(`Deploy command exited with status code ${code}`));
+                reject(new ShellError(`Deploy command exited with status code ${code}`, output.join("\n")));
             }
         });
     });
@@ -25547,7 +25587,7 @@ const shellOutput = (command) => {
                 console.log(stdout);
             }
             if (e) {
-                reject(e);
+                reject(new ShellError(e.message, [stdout, stderr].join("\n")));
             }
             else {
                 resolve(stdout);
@@ -25605,14 +25645,21 @@ const probot = (app) => {
                     }
                     catch (e) {
                         const message = `release and deploy to ${environment} failed: ${errorMessage(e)}`;
-                        await createCommentWithMention(context, `${message} (${githubActionLink("View logs")})`);
+                        const body = [
+                            comment.mention(),
+                            `${message} (${githubActionLink("Details")})`,
+                        ];
+                        if (e instanceof ShellError) {
+                            body.push(comment.details("Output", comment.codeBlock(e.output)));
+                        }
+                        await createComment(context, body);
                         error(message);
                     }
                 }
                 else {
                     const prNumber = deploymentPullRequestNumber(deployment);
                     const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
-                    await createCommentWithMention(context, message);
+                    await createComment(context, [comment.mention(), message]);
                     error(message);
                 }
             }

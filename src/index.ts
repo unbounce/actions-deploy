@@ -2,6 +2,8 @@ import { spawn, exec } from "child_process";
 import { Application, Context, GitHubAPI } from "probot";
 import adapt from "probot-actions-adapter";
 
+import * as comment from "./comment";
+
 type UnwrapPromise<T> = T extends Promise<infer U> ? U : T;
 // tslint:disable-next-line:array-type
 type UnwrapList<T> = T extends Array<infer U> ? U : T;
@@ -37,18 +39,15 @@ const config = {
 
 // From https://github.com/probot/commands/blob/master/index.js
 const commandMatches = (context: Context, match: string): boolean => {
+  // tslint:disable:no-shadowed-variable
   const { comment, issue, pull_request: pr } = context.payload;
   const command = (comment || issue || pr).body.match(/^\/([\w]+)\b *(.*)?$/m);
   return command && command[1] === match;
 };
 
-const createComment = (context: Context, body: string) => {
-  const issueComment = context.issue({ body });
+const createComment = (context: Context, body: string[]) => {
+  const issueComment = context.issue({ body: body.join("\n") });
   return context.github.issues.createComment(issueComment);
-};
-
-const createCommentWithMention = (context: Context, body: string) => {
-  return createComment(context, `@${process.env.GITHUB_ACTOR} ${body}`);
 };
 
 // GitHub Actions Annotations
@@ -141,10 +140,17 @@ const environmentIsAvailable = (context: Context, deployment?: Deployment) => {
   }
 };
 
+class ShellError extends Error {
+  constructor(public message: string, public output: string) {
+    super(message);
+  }
+}
+
 const shell = async (
   commands: string[],
   extraEnv: Record<string, string> = {}
 ) => {
+  const output: string[] = [];
   return new Promise((resolve, reject) => {
     const env = {
       ...process.env,
@@ -157,16 +163,29 @@ const shell = async (
       ["-e", "-x", "-c", commands.join("\n")],
       options
     );
-    child.stdout.on("data", (data) => console.log(data.toString()));
-    child.stderr.on("data", (data) => console.error(data.toString()));
+    child.stdout.on("data", (data) => {
+      const str = data.toString();
+      output.push(str);
+      console.log(str);
+    });
+    child.stderr.on("data", (data) => {
+      const str = data.toString();
+      output.push(str);
+      console.error(str);
+    });
     child.on("error", (e) => {
       reject(e);
     });
     child.on("exit", (code) => {
       if (code === 0) {
-        resolve();
+        resolve(output.join("\n"));
       } else {
-        reject(new Error(`Deploy command exited with status code ${code}`));
+        reject(
+          new ShellError(
+            `Deploy command exited with status code ${code}`,
+            output.join("\n")
+          )
+        );
       }
     });
   });
@@ -182,7 +201,7 @@ const shellOutput = (command: string): Promise<string> => {
         console.log(stdout);
       }
       if (e) {
-        reject(e);
+        reject(new ShellError(e.message, [stdout, stderr].join("\n")));
       } else {
         resolve(stdout);
       }
@@ -260,16 +279,20 @@ const probot = (app: Application) => {
             const message = `release and deploy to ${environment} failed: ${errorMessage(
               e
             )}`;
-            await createCommentWithMention(
-              context,
-              `${message} (${githubActionLink("View logs")})`
-            );
+            const body = [
+              comment.mention(),
+              `${message} (${githubActionLink("Details")})`,
+            ];
+            if (e instanceof ShellError) {
+              body.push(comment.details("Output", comment.codeBlock(e.output)));
+            }
+            await createComment(context, body);
             error(message);
           }
         } else {
           const prNumber = deploymentPullRequestNumber(deployment);
           const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
-          await createCommentWithMention(context, message);
+          await createComment(context, [comment.mention(), message]);
           error(message);
         }
       }
