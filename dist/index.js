@@ -25663,15 +25663,15 @@ const probot = (app) => {
             if (commandMatches(context, "qa")) {
                 if (environmentIsAvailable(context, deployment)) {
                     try {
-                        await updatePullRequest(pr.data);
-                    }
-                    catch (e) {
-                        handleError(context, `I failed to bring ${pr.data.head.ref} up-to-date with ${pr.data.base.ref}`, e);
-                        return;
-                    }
-                    try {
                         const { ref } = pr.data.head;
                         await checkoutPullRequest(pr.data);
+                        try {
+                            await updatePullRequest(pr.data);
+                        }
+                        catch (e) {
+                            handleError(context, `I failed to bring ${pr.data.head.ref} up-to-date with ${pr.data.base.ref}`, e);
+                            return;
+                        }
                         const version = await getShortCommit();
                         const output = await handleDeploy(context, version, environment, { pr: context.issue().number }, [
                             `export RELEASE_BRANCH=${ref}`,
