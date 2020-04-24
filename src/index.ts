@@ -240,14 +240,19 @@ const checkoutPullRequest = (pr: PullRequest) => {
 
 const updatePullRequest = (pr: PullRequest) => {
   const currentCommit = pr.head.sha;
+  const currentBranch = pr.head.ref;
   const baseBranch = pr.base.ref;
   try {
-    return shell([`git pull --rebase origin ${baseBranch}`]);
+    return shell([
+      `git pull --rebase origin ${baseBranch}`,
+      `git push --force-with-lease origin ${currentBranch}`,
+    ]);
   } catch (e) {
     // If rebase wasn't clean, reset and try regular merge
     return shell([
       `git reset --hard ${currentCommit}`,
       `git pull origin ${baseBranch}`,
+      `git push origin ${currentBranch}`,
     ]);
   }
 };
