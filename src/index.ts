@@ -272,10 +272,11 @@ const probot = (app: Application) => {
               ]
             );
             const body = [
-              comment.mention(),
-              `deployed ${version} to ${environment} (${comment.runLink(
-                "Details"
-              )})`,
+              comment.mention(
+                `deployed ${version} to ${environment} (${comment.runLink(
+                  "Details"
+                )})`
+              ),
               comment.details("Output", comment.codeBlock(output)),
             ];
             await createComment(context, body);
@@ -284,8 +285,7 @@ const probot = (app: Application) => {
               e
             )}`;
             const body = [
-              comment.mention(),
-              `${message} (${comment.runLink("Details")})`,
+              comment.mention(`${message} (${comment.runLink("Details")})`),
             ];
             if (e instanceof ShellError) {
               body.push(comment.details("Output", comment.codeBlock(e.output)));
@@ -296,7 +296,7 @@ const probot = (app: Application) => {
         } else {
           const prNumber = deploymentPullRequestNumber(deployment);
           const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
-          await createComment(context, [comment.mention(), message]);
+          await createComment(context, [comment.mention(message)]);
           error(message);
         }
       }

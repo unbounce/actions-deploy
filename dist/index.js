@@ -25652,7 +25652,7 @@ const probot = (app) => {
                     catch (e) {
                         const message = `release and deploy to ${environment} failed: ${errorMessage(e)}`;
                         const body = [
-                            comment.mention(`${message} (${comment.runLink("Details")})`)
+                            comment.mention(`${message} (${comment.runLink("Details")})`),
                         ];
                         if (e instanceof ShellError) {
                             body.push(comment.details("Output", comment.codeBlock(e.output)));
