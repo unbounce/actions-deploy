@@ -2,8 +2,8 @@ export const details = (summary: string, body: string) => {
   return `<details>\n<summary>${summary}</summary>\n\n${body}\n</details>`;
 };
 
-export const mention = () => {
-  return `@${process.env.GITHUB_ACTOR} `;
+export const mention = (body: string) => {
+  return `@${process.env.GITHUB_ACTOR} ${body}`;
 };
 
 export const codeBlock = (body: string) => {
