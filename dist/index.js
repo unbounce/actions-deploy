@@ -1668,14 +1668,14 @@ function parseOptions(options, log, hook) {
 
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.details = (summary, body) => {
-    return `<details><summary>${summary}</summary>${body}</details>`;
+    return `<details>\n<summary>${summary}</summary>\n\n${body}\n</details>`;
 };
 exports.mention = () => {
     return `@${process.env.GITHUB_ACTOR} `;
 };
 exports.codeBlock = (body) => {
     const ticks = "```";
-    return `${ticks}${body}${ticks}`;
+    return `${ticks}\n${body}\n${ticks}`;
 };
 exports.runLink = (text) => {
     const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}?check_suite_focus=true`;

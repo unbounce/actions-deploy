@@ -1,5 +1,5 @@
 export const details = (summary: string, body: string) => {
-  return `<details><summary>${summary}</summary>${body}</details>`;
+  return `<details>\n<summary>${summary}</summary>\n\n${body}\n</details>`;
 };
 
 export const mention = () => {
@@ -8,7 +8,7 @@ export const mention = () => {
 
 export const codeBlock = (body: string) => {
   const ticks = "```";
-  return `${ticks}${body}${ticks}`;
+  return `${ticks}\n${body}\n${ticks}`;
 };
 
 export const runLink = (text: string) => {
