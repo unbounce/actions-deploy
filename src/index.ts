@@ -238,8 +238,32 @@ const checkoutPullRequest = (pr: PullRequest) => {
   ]);
 };
 
+const updatePullRequest = (pr: PullRequest) => {
+  const currentCommit = pr.head.sha;
+  const baseBranch = pr.base.ref;
+  try {
+    return shell([`git pull --rebase origin ${baseBranch}`]);
+  } catch (e) {
+    // If rebase wasn't clean, reset and try regular merge
+    return shell([
+      `git reset --hard ${currentCommit}`,
+      `git pull origin ${baseBranch}`,
+    ]);
+  }
+};
+
 const getShortCommit = () =>
   shellOutput("git rev-parse --short HEAD").then((s) => s.toString().trim());
+
+const handleError = async (context: Context, text: string, e: Error) => {
+  const message = `${text}: ${errorMessage(e)}`;
+  const body = [comment.mention(`${message} (${comment.runLink("Details")})`)];
+  if (e instanceof ShellError) {
+    body.push(comment.details("Output", comment.codeBlock(e.output)));
+  }
+  await createComment(context, body);
+  error(message);
+};
 
 const probot = (app: Application) => {
   // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
@@ -256,6 +280,17 @@ const probot = (app: Application) => {
       const deployment = await findDeployment(context, environment);
       if (commandMatches(context, "qa")) {
         if (environmentIsAvailable(context, deployment)) {
+          try {
+            await updatePullRequest(pr.data);
+          } catch (e) {
+            handleError(
+              context,
+              `I failed to bring ${pr.data.head.ref} up-to-date with ${pr.data.base.ref}`,
+              e
+            );
+            return;
+          }
+
           try {
             const { ref } = pr.data.head;
             await checkoutPullRequest(pr.data);
@@ -281,17 +316,11 @@ const probot = (app: Application) => {
             ];
             await createComment(context, body);
           } catch (e) {
-            const message = `release and deploy to ${environment} failed: ${errorMessage(
+            handleError(
+              context,
+              `release and deploy to ${environment} failed`,
               e
-            )}`;
-            const body = [
-              comment.mention(`${message} (${comment.runLink("Details")})`),
-            ];
-            if (e instanceof ShellError) {
-              body.push(comment.details("Output", comment.codeBlock(e.output)));
-            }
-            await createComment(context, body);
-            error(message);
+            );
           }
         } else {
           const prNumber = deploymentPullRequestNumber(deployment);
