@@ -1677,6 +1677,10 @@ exports.codeBlock = (body) => {
     const ticks = "```";
     return `${ticks}${body}${ticks}`;
 };
+exports.runLink = (text) => {
+    const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}?check_suite_focus=true`;
+    return `[${text}](${url})`;
+};
 
 
 /***/ }),
@@ -25487,10 +25491,6 @@ const errorMessage = (e) => {
         return e.toString();
     }
 };
-const githubActionLink = (text) => {
-    const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}?check_suite_focus=true`;
-    return `[${text}](${url})`;
-};
 const setCommitStatus = async (context, state) => {
     const pr = await context.github.pulls.get(context.issue());
     if (pr) {
@@ -25604,8 +25604,9 @@ const handleDeploy = async (context, version, environment, payload, commands) =>
             VERSION: version,
             ENVIRONMENT: environment,
         };
-        await shell(commands, env);
+        const output = await shell(commands, env);
         await setDeploymentStatus(context, id, "success");
+        return output;
     }
     catch (e) {
         await setDeploymentStatus(context, id, "error");
@@ -25637,17 +25638,23 @@ const probot = (app) => {
                         const { ref } = pr.data.head;
                         await checkoutPullRequest(pr.data);
                         const version = await getShortCommit();
-                        await handleDeploy(context, version, environment, { pr: context.issue().number }, [
+                        const output = await handleDeploy(context, version, environment, { pr: context.issue().number }, [
                             `export RELEASE_BRANCH=${ref}`,
                             config.releaseCommand,
                             config.deployCommand,
                         ]);
+                        const body = [
+                            comment.mention(),
+                            `deployed ${version} to ${environment} (${comment.runLink("Details")})`,
+                            comment.details("Output", comment.codeBlock(output)),
+                        ];
+                        await createComment(context, body);
                     }
                     catch (e) {
                         const message = `release and deploy to ${environment} failed: ${errorMessage(e)}`;
                         const body = [
                             comment.mention(),
-                            `${message} (${githubActionLink("Details")})`,
+                            `${message} (${comment.runLink("Details")})`,
                         ];
                         if (e instanceof ShellError) {
                             body.push(comment.details("Output", comment.codeBlock(e.output)));
