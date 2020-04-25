@@ -176,10 +176,7 @@ const shell = async (
         resolve(output.join("\n"));
       } else {
         reject(
-          new ShellError(
-            `Deploy command exited with status code ${code}`,
-            output.join("\n")
-          )
+          new ShellError(`exited with status code ${code}`, output.join("\n"))
         );
       }
     });
@@ -238,17 +235,18 @@ const checkoutPullRequest = (pr: PullRequest) => {
   ]);
 };
 
-const updatePullRequest = (pr: PullRequest) => {
+const updatePullRequest = async (pr: PullRequest) => {
   const currentCommit = pr.head.sha;
   const currentBranch = pr.head.ref;
   const baseBranch = pr.base.ref;
   try {
-    return shell([
+    return await shell([
       `git pull --rebase origin ${baseBranch}`,
       `git push --force-with-lease origin ${currentBranch}`,
     ]);
   } catch (e) {
     // If rebase wasn't clean, reset and try regular merge
+    console.log("Rebase failed, trying merge instead");
     return shell([
       `git reset --hard ${currentCommit}`,
       `git pull origin ${baseBranch}`,
