@@ -25630,7 +25630,8 @@ const updatePullRequest = async (pr) => {
     const baseBranch = pr.base.ref;
     try {
         return await shell([
-            `git fetch --unshallow`,
+            `git fetch --unshallow origin ${baseBranch}`,
+            `git fetch --unshallow origin ${currentBranch}`,
             `git pull --rebase origin ${baseBranch}`,
             `git push --force-with-lease origin ${currentBranch}`,
         ]);
