@@ -1,111 +1,24 @@
-import { Application, Context, GitHubAPI } from "probot";
+import { Application, Context } from "probot";
 import adapt from "probot-actions-adapter";
 
-import { commandMatches, createComment, setCommitStatus } from "./utils";
+import { config } from "./config";
+import {
+  commandMatches,
+  createComment,
+  setCommitStatus,
+  setDeploymentStatus,
+  createDeployment,
+  findDeployment,
+  environmentIsAvailable,
+  deploymentPullRequestNumber,
+  handleError,
+} from "./utils";
 import { debug, error } from "./logging";
-import { shell, shellOutput, ShellError } from "./shell";
+import { shell } from "./shell";
+import { getShortCommit, checkoutPullRequest, updatePullRequest } from "./git";
 import * as comment from "./comment";
 
-type UnwrapPromise<T> = T extends Promise<infer U> ? U : T;
-// tslint:disable-next-line:array-type
-type UnwrapList<T> = T extends Array<infer U> ? U : T;
-type Deployment = UnwrapList<
-  UnwrapPromise<ReturnType<GitHubAPI["repos"]["listDeployments"]>>["data"]
->;
-type PullRequest = UnwrapList<
-  UnwrapPromise<ReturnType<GitHubAPI["pulls"]["get"]>>["data"]
->;
-type DeploymentStatusState = NonNullable<
-  UnwrapList<Parameters<GitHubAPI["repos"]["createDeploymentStatus"]>>
->["state"];
-
-const input = (name: string) => {
-  const envName = `INPUT_${name}`.toUpperCase().replace(" ", "_");
-  const value = process.env[envName];
-  if (typeof value === "undefined") {
-    throw new Error(`Input ${name} was not provided`);
-  }
-  return value;
-};
-
-const config = {
-  statusCheckContext: "QA",
-  productionEnvironment: input("production-environment"),
-  preProductionEnvironment: input("pre-production-environment"),
-  deployCommand: input("deploy"),
-  releaseCommand: input("release"),
-};
-
-const errorMessage = (e: any) => {
-  if (e instanceof Error && e.message) {
-    return e.message;
-  } else {
-    return e.toString();
-  }
-};
-
-// Deployments
-
-const findDeployment = async (context: Context, environment: string) => {
-  const deployments = await context.github.repos.listDeployments(
-    context.repo({ environment })
-  );
-  if (deployments.data.length > 0) {
-    return deployments.data[0];
-  } else {
-    return undefined;
-  }
-};
-
-const setDeploymentStatus = (
-  context: Context,
-  deploymentId: number,
-  state: DeploymentStatusState
-) =>
-  context.github.repos.createDeploymentStatus(
-    context.repo({ deployment_id: deploymentId, state })
-  );
-
-const createDeployment = (
-  context: Context,
-  ref: string,
-  environment: string,
-  payload: object
-) =>
-  context.github.repos.createDeployment(
-    context.repo({
-      task: "deploy",
-      payload: JSON.stringify(payload),
-      required_contexts: [],
-      auto_merge: true,
-      environment,
-      ref,
-    })
-  );
-
-const deploymentPullRequestNumber = (deployment?: Deployment) =>
-  JSON.parse(deployment ? ((deployment.payload as unknown) as string) : "{}")
-    .pr;
-
-const environmentIsAvailable = async (
-  context: Context,
-  deployment?: Deployment
-) => {
-  if (deployment) {
-    const prNumber = deploymentPullRequestNumber(deployment);
-    if (typeof prNumber === "number") {
-      if (prNumber !== context.issue().number) {
-        const otherPr = await context.github.pulls.get(
-          context.repo({ pull_number: prNumber })
-        );
-        if (otherPr && otherPr.data.state === "open") {
-          return false;
-        }
-      }
-    }
-  }
-  return true;
-};
+import { PullRequest } from "./types";
 
 const handleDeploy = async (
   context: Context,
@@ -131,49 +44,6 @@ const handleDeploy = async (
     await setDeploymentStatus(context, id, "error");
     throw e;
   }
-};
-
-const checkoutPullRequest = (pr: PullRequest) => {
-  const { sha, ref } = pr.head;
-  return shell([
-    `git fetch origin ${sha}:refs/remotes/origin/${ref}`,
-    `git checkout -b ${ref}`,
-  ]);
-};
-
-const updatePullRequest = async (pr: PullRequest) => {
-  const currentCommit = pr.head.sha;
-  const currentBranch = pr.head.ref;
-  const baseBranch = pr.base.ref;
-  try {
-    return await shell([
-      `git fetch --unshallow origin ${baseBranch}`,
-      `git fetch --unshallow origin ${currentBranch}`,
-      `git pull --rebase origin ${baseBranch}`,
-      `git push --force-with-lease origin ${currentBranch}`,
-    ]);
-  } catch (e) {
-    // If rebase wasn't clean, reset and try regular merge
-    console.log("Rebase failed, trying merge instead");
-    return shell([
-      `git reset --hard ${currentCommit}`,
-      `git pull origin ${baseBranch}`,
-      `git push origin ${currentBranch}`,
-    ]);
-  }
-};
-
-const getShortCommit = () =>
-  shellOutput("git rev-parse --short HEAD").then((s) => s.toString().trim());
-
-const handleError = async (context: Context, text: string, e: Error) => {
-  const message = `${text}: ${comment.code(errorMessage(e))}`;
-  const body = [comment.mention(`${message} (${comment.runLink("Details")})`)];
-  if (e instanceof ShellError) {
-    body.push(comment.details("Output", comment.codeBlock(e.output)));
-  }
-  await createComment(context, body);
-  error(message);
 };
 
 const handleQA = async (context: Context, pr: PullRequest) => {

@@ -25455,145 +25455,50 @@ var __importStar = (this && this.__importStar) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const probot_actions_adapter_1 = __importDefault(__webpack_require__(875));
+const config_1 = __webpack_require__(641);
 const utils_1 = __webpack_require__(440);
 const logging_1 = __webpack_require__(376);
 const shell_1 = __webpack_require__(798);
+const git_1 = __webpack_require__(984);
 const comment = __importStar(__webpack_require__(38));
-const input = (name) => {
-    const envName = `INPUT_${name}`.toUpperCase().replace(" ", "_");
-    const value = process.env[envName];
-    if (typeof value === "undefined") {
-        throw new Error(`Input ${name} was not provided`);
-    }
-    return value;
-};
-const config = {
-    statusCheckContext: "QA",
-    productionEnvironment: input("production-environment"),
-    preProductionEnvironment: input("pre-production-environment"),
-    deployCommand: input("deploy"),
-    releaseCommand: input("release"),
-};
-const errorMessage = (e) => {
-    if (e instanceof Error && e.message) {
-        return e.message;
-    }
-    else {
-        return e.toString();
-    }
-};
-// Deployments
-const findDeployment = async (context, environment) => {
-    const deployments = await context.github.repos.listDeployments(context.repo({ environment }));
-    if (deployments.data.length > 0) {
-        return deployments.data[0];
-    }
-    else {
-        return undefined;
-    }
-};
-const setDeploymentStatus = (context, deploymentId, state) => context.github.repos.createDeploymentStatus(context.repo({ deployment_id: deploymentId, state }));
-const createDeployment = (context, ref, environment, payload) => context.github.repos.createDeployment(context.repo({
-    task: "deploy",
-    payload: JSON.stringify(payload),
-    required_contexts: [],
-    auto_merge: true,
-    environment,
-    ref,
-}));
-const deploymentPullRequestNumber = (deployment) => JSON.parse(deployment ? deployment.payload : "{}")
-    .pr;
-const environmentIsAvailable = async (context, deployment) => {
-    if (deployment) {
-        const prNumber = deploymentPullRequestNumber(deployment);
-        if (typeof prNumber === "number") {
-            if (prNumber !== context.issue().number) {
-                const otherPr = await context.github.pulls.get(context.repo({ pull_number: prNumber }));
-                if (otherPr && otherPr.data.state === "open") {
-                    return false;
-                }
-            }
-        }
-    }
-    return true;
-};
 const handleDeploy = async (context, version, environment, payload, commands) => {
     // Resources created as part of an Action can not trigger other actions, so we
     // can't handle the deployment as part of `app.on('deployment')`
-    const { data: { id }, } = await createDeployment(context, version, environment, payload);
+    const { data: { id }, } = await utils_1.createDeployment(context, version, environment, payload);
     try {
         const env = {
             VERSION: version,
             ENVIRONMENT: environment,
         };
         const output = await shell_1.shell(commands, env);
-        await setDeploymentStatus(context, id, "success");
+        await utils_1.setDeploymentStatus(context, id, "success");
         return output;
     }
     catch (e) {
-        await setDeploymentStatus(context, id, "error");
+        await utils_1.setDeploymentStatus(context, id, "error");
         throw e;
     }
 };
-const checkoutPullRequest = (pr) => {
-    const { sha, ref } = pr.head;
-    return shell_1.shell([
-        `git fetch origin ${sha}:refs/remotes/origin/${ref}`,
-        `git checkout -b ${ref}`,
-    ]);
-};
-const updatePullRequest = async (pr) => {
-    const currentCommit = pr.head.sha;
-    const currentBranch = pr.head.ref;
-    const baseBranch = pr.base.ref;
-    try {
-        return await shell_1.shell([
-            `git fetch --unshallow origin ${baseBranch}`,
-            `git fetch --unshallow origin ${currentBranch}`,
-            `git pull --rebase origin ${baseBranch}`,
-            `git push --force-with-lease origin ${currentBranch}`,
-        ]);
-    }
-    catch (e) {
-        // If rebase wasn't clean, reset and try regular merge
-        console.log("Rebase failed, trying merge instead");
-        return shell_1.shell([
-            `git reset --hard ${currentCommit}`,
-            `git pull origin ${baseBranch}`,
-            `git push origin ${currentBranch}`,
-        ]);
-    }
-};
-const getShortCommit = () => shell_1.shellOutput("git rev-parse --short HEAD").then((s) => s.toString().trim());
-const handleError = async (context, text, e) => {
-    const message = `${text}: ${comment.code(errorMessage(e))}`;
-    const body = [comment.mention(`${message} (${comment.runLink("Details")})`)];
-    if (e instanceof shell_1.ShellError) {
-        body.push(comment.details("Output", comment.codeBlock(e.output)));
-    }
-    await utils_1.createComment(context, body);
-    logging_1.error(message);
-};
 const handleQA = async (context, pr) => {
-    const environment = config.preProductionEnvironment;
-    const deployment = await findDeployment(context, environment);
+    const environment = config_1.config.preProductionEnvironment;
+    const deployment = await utils_1.findDeployment(context, environment);
     if (utils_1.commandMatches(context, "qa")) {
-        if (environmentIsAvailable(context, deployment)) {
+        if (utils_1.environmentIsAvailable(context, deployment)) {
             try {
                 const { ref } = pr.head;
-                await checkoutPullRequest(pr);
+                await git_1.checkoutPullRequest(pr);
                 try {
-                    await updatePullRequest(pr);
+                    await git_1.updatePullRequest(pr);
                 }
                 catch (e) {
-                    handleError(context, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}`, e);
+                    utils_1.handleError(context, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}`, e);
                     return;
                 }
-                const version = await getShortCommit();
+                const version = await git_1.getShortCommit();
                 const output = await handleDeploy(context, version, environment, { pr: context.issue().number }, [
                     `export RELEASE_BRANCH=${ref}`,
-                    config.releaseCommand,
-                    config.deployCommand,
+                    config_1.config.releaseCommand,
+                    config_1.config.deployCommand,
                 ]);
                 const body = [
                     comment.mention(`deployed ${version} to ${environment} (${comment.runLink("Details")})`),
@@ -25602,11 +25507,11 @@ const handleQA = async (context, pr) => {
                 await utils_1.createComment(context, body);
             }
             catch (e) {
-                handleError(context, `release and deploy to ${environment} failed`, e);
+                utils_1.handleError(context, `release and deploy to ${environment} failed`, e);
             }
         }
         else {
-            const prNumber = deploymentPullRequestNumber(deployment);
+            const prNumber = utils_1.deploymentPullRequestNumber(deployment);
             const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
             await utils_1.createComment(context, [comment.mention(message)]);
             logging_1.error(message);
@@ -36367,14 +36272,25 @@ module.exports = {
 
 /***/ }),
 /* 440 */
-/***/ (function(__unusedmodule, exports) {
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
 
 "use strict";
 
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const statusCheckContext = "QA";
+const config_1 = __webpack_require__(641);
+const comment = __importStar(__webpack_require__(38));
+const shell_1 = __webpack_require__(798);
+const logging_1 = __webpack_require__(376);
 // From https://github.com/probot/commands/blob/master/index.js
 exports.commandMatches = (context, match) => {
+    // tslint:disable-next-line:no-shadowed-variable
     const { comment, issue, pull_request: pr } = context.payload;
     const command = (comment || issue || pr).body.match(/^\/([\w-]+)\s*?(.*)?$/m);
     return command && command[1] === match;
@@ -36390,12 +36306,63 @@ exports.setCommitStatus = async (context, state) => {
         return context.github.repos.createStatus(context.repo({
             sha,
             state,
-            context: statusCheckContext,
+            context: config_1.config.statusCheckContext,
         }));
     }
     else {
         return Promise.resolve();
     }
+};
+exports.findDeployment = async (context, environment) => {
+    const deployments = await context.github.repos.listDeployments(context.repo({ environment }));
+    if (deployments.data.length > 0) {
+        return deployments.data[0];
+    }
+    else {
+        return undefined;
+    }
+};
+exports.setDeploymentStatus = (context, deploymentId, state) => context.github.repos.createDeploymentStatus(context.repo({ deployment_id: deploymentId, state }));
+exports.createDeployment = (context, ref, environment, payload) => context.github.repos.createDeployment(context.repo({
+    task: "deploy",
+    payload: JSON.stringify(payload),
+    required_contexts: [],
+    auto_merge: true,
+    environment,
+    ref,
+}));
+exports.deploymentPullRequestNumber = (deployment) => JSON.parse(deployment ? deployment.payload : "{}")
+    .pr;
+exports.environmentIsAvailable = async (context, deployment) => {
+    if (deployment) {
+        const prNumber = exports.deploymentPullRequestNumber(deployment);
+        if (typeof prNumber === "number") {
+            if (prNumber !== context.issue().number) {
+                const otherPr = await context.github.pulls.get(context.repo({ pull_number: prNumber }));
+                if (otherPr && otherPr.data.state === "open") {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+};
+const errorMessage = (e) => {
+    if (e instanceof Error && e.message) {
+        return e.message;
+    }
+    else {
+        return e.toString();
+    }
+};
+exports.handleError = async (context, text, e) => {
+    const message = `${text}: ${comment.code(errorMessage(e))}`;
+    const body = [comment.mention(`${message} (${comment.runLink("Details")})`)];
+    if (e instanceof shell_1.ShellError) {
+        body.push(comment.details("Output", comment.codeBlock(e.output)));
+    }
+    await exports.createComment(context, body);
+    logging_1.error(message);
 };
 
 
@@ -56443,7 +56410,30 @@ function sha1(str){
 
 /***/ }),
 /* 640 */,
-/* 641 */,
+/* 641 */
+/***/ (function(__unusedmodule, exports) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+const input = (name) => {
+    const envName = `INPUT_${name}`.toUpperCase().replace(" ", "_");
+    const value = process.env[envName];
+    if (typeof value === "undefined") {
+        throw new Error(`Input ${name} was not provided`);
+    }
+    return value;
+};
+exports.config = {
+    statusCheckContext: "QA",
+    productionEnvironment: input("production-environment"),
+    preProductionEnvironment: input("pre-production-environment"),
+    deployCommand: input("deploy"),
+    releaseCommand: input("release"),
+};
+
+
+/***/ }),
 /* 642 */,
 /* 643 */
 /***/ (function(module) {
@@ -95042,7 +95032,46 @@ function Octokit(plugins, options) {
 
 /***/ }),
 /* 983 */,
-/* 984 */,
+/* 984 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+const shell_1 = __webpack_require__(798);
+exports.checkoutPullRequest = (pr) => {
+    const { sha, ref } = pr.head;
+    return shell_1.shell([
+        `git fetch origin ${sha}:refs/remotes/origin/${ref}`,
+        `git checkout -b ${ref}`,
+    ]);
+};
+exports.updatePullRequest = async (pr) => {
+    const currentCommit = pr.head.sha;
+    const currentBranch = pr.head.ref;
+    const baseBranch = pr.base.ref;
+    try {
+        return await shell_1.shell([
+            `git fetch --unshallow origin ${baseBranch}`,
+            `git fetch --unshallow origin ${currentBranch}`,
+            `git pull --rebase origin ${baseBranch}`,
+            `git push --force-with-lease origin ${currentBranch}`,
+        ]);
+    }
+    catch (e) {
+        // If rebase wasn't clean, reset and try regular merge
+        console.log("Rebase failed, trying merge instead");
+        return shell_1.shell([
+            `git reset --hard ${currentCommit}`,
+            `git pull origin ${baseBranch}`,
+            `git push origin ${currentBranch}`,
+        ]);
+    }
+};
+exports.getShortCommit = () => shell_1.shellOutput("git rev-parse --short HEAD").then((s) => s.toString().trim());
+
+
+/***/ }),
 /* 985 */
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
