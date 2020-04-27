@@ -122,17 +122,24 @@ const deploymentPullRequestNumber = (deployment?: Deployment) =>
   JSON.parse(deployment ? ((deployment.payload as unknown) as string) : "{}")
     .pr;
 
-const environmentIsAvailable = (context: Context, deployment?: Deployment) => {
+const environmentIsAvailable = async (
+  context: Context,
+  deployment?: Deployment
+) => {
   if (deployment) {
     const prNumber = deploymentPullRequestNumber(deployment);
-    if (prNumber) {
-      return prNumber === context.issue().number;
-    } else {
-      return true;
+    if (typeof prNumber === "number") {
+      if (prNumber !== context.issue().number) {
+        const otherPr = await context.github.pulls.get(
+          context.repo({ pull_number: prNumber })
+        );
+        if (otherPr && otherPr.data.state === "open") {
+          return false;
+        }
+      }
     }
-  } else {
-    return true;
   }
+  return true;
 };
 
 const handleDeploy = async (

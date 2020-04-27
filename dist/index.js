@@ -25530,19 +25530,19 @@ const createDeployment = (context, ref, environment, payload) => context.github.
 }));
 const deploymentPullRequestNumber = (deployment) => JSON.parse(deployment ? deployment.payload : "{}")
     .pr;
-const environmentIsAvailable = (context, deployment) => {
+const environmentIsAvailable = async (context, deployment) => {
     if (deployment) {
         const prNumber = deploymentPullRequestNumber(deployment);
-        if (prNumber) {
-            return prNumber === context.issue().number;
-        }
-        else {
-            return true;
+        if (typeof prNumber === "number") {
+            if (prNumber !== context.issue().number) {
+                const otherPr = await context.github.pulls.get(context.repo({ pull_number: prNumber }));
+                if (otherPr && otherPr.data.state === "open") {
+                    return false;
+                }
+            }
         }
     }
-    else {
-        return true;
-    }
+    return true;
 };
 const handleDeploy = async (context, version, environment, payload, commands) => {
     // Resources created as part of an Action can not trigger other actions, so we
