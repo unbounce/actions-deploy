@@ -259,7 +259,7 @@ const getShortCommit = () =>
   shellOutput("git rev-parse --short HEAD").then((s) => s.toString().trim());
 
 const handleError = async (context: Context, text: string, e: Error) => {
-  const message = `${text}: ${errorMessage(e)}`;
+  const message = `${text}: ${comment.code(errorMessage(e))}`;
   const body = [comment.mention(`${message} (${comment.runLink("Details")})`)];
   if (e instanceof ShellError) {
     body.push(comment.details("Output", comment.codeBlock(e.output)));

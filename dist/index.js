@@ -1677,6 +1677,10 @@ exports.codeBlock = (body) => {
     const ticks = "```";
     return `${ticks}\n${body}\n${ticks}`;
 };
+exports.code = (body) => {
+    const tick = "`";
+    return `${tick}${body}${tick}`;
+};
 exports.runLink = (text) => {
     const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}?check_suite_focus=true`;
     return `[${text}](${url})`;
@@ -25642,7 +25646,7 @@ const updatePullRequest = async (pr) => {
 };
 const getShortCommit = () => shellOutput("git rev-parse --short HEAD").then((s) => s.toString().trim());
 const handleError = async (context, text, e) => {
-    const message = `${text}: ${errorMessage(e)}`;
+    const message = `${text}: ${comment.code(errorMessage(e))}`;
     const body = [comment.mention(`${message} (${comment.runLink("Details")})`)];
     if (e instanceof ShellError) {
         body.push(comment.details("Output", comment.codeBlock(e.output)));
