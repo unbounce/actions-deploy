@@ -57,7 +57,7 @@ const handleQA = async (context: Context, pr: PullRequest) => {
         try {
           await updatePullRequest(pr);
         } catch (e) {
-          handleError(
+          await handleError(
             context,
             `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`,
             e
@@ -86,7 +86,11 @@ const handleQA = async (context: Context, pr: PullRequest) => {
         ];
         await createComment(context, body);
       } catch (e) {
-        handleError(context, `release and deploy to ${environment} failed`, e);
+        await handleError(
+          context,
+          `release and deploy to ${environment} failed`,
+          e
+        );
       }
     } else {
       const prNumber = deploymentPullRequestNumber(deployment);

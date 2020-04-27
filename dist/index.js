@@ -25491,7 +25491,7 @@ const handleQA = async (context, pr) => {
                     await git_1.updatePullRequest(pr);
                 }
                 catch (e) {
-                    utils_1.handleError(context, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`, e);
+                    await utils_1.handleError(context, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`, e);
                     return;
                 }
                 const version = await git_1.getShortCommit();
@@ -25507,7 +25507,7 @@ const handleQA = async (context, pr) => {
                 await utils_1.createComment(context, body);
             }
             catch (e) {
-                utils_1.handleError(context, `release and deploy to ${environment} failed`, e);
+                await utils_1.handleError(context, `release and deploy to ${environment} failed`, e);
             }
         }
         else {
