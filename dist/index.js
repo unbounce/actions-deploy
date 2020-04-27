@@ -25454,8 +25454,8 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const child_process_1 = __webpack_require__(129);
 const probot_actions_adapter_1 = __importDefault(__webpack_require__(875));
+const shell_1 = __webpack_require__(798);
 const comment = __importStar(__webpack_require__(38));
 const input = (name) => {
     const envName = `INPUT_${name}`.toUpperCase().replace(" ", "_");
@@ -25544,61 +25544,6 @@ const environmentIsAvailable = (context, deployment) => {
         return true;
     }
 };
-class ShellError extends Error {
-    constructor(message, output) {
-        super(message);
-        this.message = message;
-        this.output = output;
-    }
-}
-const shell = async (commands, extraEnv = {}) => {
-    const output = [];
-    return new Promise((resolve, reject) => {
-        const env = Object.assign(Object.assign({}, process.env), extraEnv);
-        const options = { env, cwd: process.cwd() };
-        // TODO shell escape command
-        const child = child_process_1.spawn("bash", ["-e", "-x", "-c", commands.join("\n")], options);
-        child.stdout.on("data", (data) => {
-            const str = data.toString();
-            output.push(str);
-            console.log(str);
-        });
-        child.stderr.on("data", (data) => {
-            const str = data.toString();
-            output.push(str);
-            console.error(str);
-        });
-        child.on("error", (e) => {
-            reject(e);
-        });
-        child.on("exit", (code) => {
-            if (code === 0) {
-                resolve(output.join("\n"));
-            }
-            else {
-                reject(new ShellError(`exited with status code ${code}`, output.join("\n")));
-            }
-        });
-    });
-};
-const shellOutput = (command) => {
-    return new Promise((resolve, reject) => {
-        child_process_1.exec(command, (e, stdout, stderr) => {
-            if (stderr) {
-                console.error(stderr);
-            }
-            if (stdout) {
-                console.log(stdout);
-            }
-            if (e) {
-                reject(new ShellError(e.message, [stdout, stderr].join("\n")));
-            }
-            else {
-                resolve(stdout);
-            }
-        });
-    });
-};
 const handleDeploy = async (context, version, environment, payload, commands) => {
     // Resources created as part of an Action can not trigger other actions, so we
     // can't handle the deployment as part of `app.on('deployment')`
@@ -25608,7 +25553,7 @@ const handleDeploy = async (context, version, environment, payload, commands) =>
             VERSION: version,
             ENVIRONMENT: environment,
         };
-        const output = await shell(commands, env);
+        const output = await shell_1.shell(commands, env);
         await setDeploymentStatus(context, id, "success");
         return output;
     }
@@ -25619,7 +25564,7 @@ const handleDeploy = async (context, version, environment, payload, commands) =>
 };
 const checkoutPullRequest = (pr) => {
     const { sha, ref } = pr.head;
-    return shell([
+    return shell_1.shell([
         `git fetch origin ${sha}:refs/remotes/origin/${ref}`,
         `git checkout -b ${ref}`,
     ]);
@@ -25629,7 +25574,7 @@ const updatePullRequest = async (pr) => {
     const currentBranch = pr.head.ref;
     const baseBranch = pr.base.ref;
     try {
-        return await shell([
+        return await shell_1.shell([
             `git fetch --unshallow origin ${baseBranch}`,
             `git fetch --unshallow origin ${currentBranch}`,
             `git pull --rebase origin ${baseBranch}`,
@@ -25639,18 +25584,18 @@ const updatePullRequest = async (pr) => {
     catch (e) {
         // If rebase wasn't clean, reset and try regular merge
         console.log("Rebase failed, trying merge instead");
-        return shell([
+        return shell_1.shell([
             `git reset --hard ${currentCommit}`,
             `git pull origin ${baseBranch}`,
             `git push origin ${currentBranch}`,
         ]);
     }
 };
-const getShortCommit = () => shellOutput("git rev-parse --short HEAD").then((s) => s.toString().trim());
+const getShortCommit = () => shell_1.shellOutput("git rev-parse --short HEAD").then((s) => s.toString().trim());
 const handleError = async (context, text, e) => {
     const message = `${text}: ${comment.code(errorMessage(e))}`;
     const body = [comment.mention(`${message} (${comment.runLink("Details")})`)];
-    if (e instanceof ShellError) {
+    if (e instanceof shell_1.ShellError) {
         body.push(comment.details("Output", comment.codeBlock(e.output)));
     }
     await createComment(context, body);
@@ -79160,7 +79105,72 @@ function detectEncoding(buf, defaultEncoding) {
 
 
 /***/ }),
-/* 798 */,
+/* 798 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+const child_process_1 = __webpack_require__(129);
+class ShellError extends Error {
+    constructor(message, output) {
+        super(message);
+        this.message = message;
+        this.output = output;
+    }
+}
+exports.ShellError = ShellError;
+exports.shell = async (commands, extraEnv = {}) => {
+    const output = [];
+    return new Promise((resolve, reject) => {
+        const env = Object.assign(Object.assign({}, process.env), extraEnv);
+        const options = { env, cwd: process.cwd() };
+        // TODO shell escape command
+        const child = child_process_1.spawn("bash", ["-e", "-x", "-c", commands.join("\n")], options);
+        child.stdout.on("data", (data) => {
+            const str = data.toString();
+            output.push(str);
+            console.log(str);
+        });
+        child.stderr.on("data", (data) => {
+            const str = data.toString();
+            output.push(str);
+            console.error(str);
+        });
+        child.on("error", (e) => {
+            reject(e);
+        });
+        child.on("exit", (code) => {
+            if (code === 0) {
+                resolve(output.join("\n"));
+            }
+            else {
+                reject(new ShellError(`exited with status code ${code}`, output.join("\n")));
+            }
+        });
+    });
+};
+exports.shellOutput = (command) => {
+    return new Promise((resolve, reject) => {
+        child_process_1.exec(command, (e, stdout, stderr) => {
+            if (stderr) {
+                console.error(stderr);
+            }
+            if (stdout) {
+                console.log(stdout);
+            }
+            if (e) {
+                reject(new ShellError(e.message, [stdout, stderr].join("\n")));
+            }
+            else {
+                resolve(stdout);
+            }
+        });
+    });
+};
+
+
+/***/ }),
 /* 799 */,
 /* 800 */,
 /* 801 */
