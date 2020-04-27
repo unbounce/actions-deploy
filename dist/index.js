@@ -25505,6 +25505,7 @@ const handleQA = async (context, pr) => {
                     comment.details("Output", comment.codeBlock(output)),
                 ];
                 await utils_1.createComment(context, body);
+                await utils_1.setCommitStatus(context, "success");
             }
             catch (e) {
                 await utils_1.handleError(context, `release and deploy to ${environment} failed`, e);

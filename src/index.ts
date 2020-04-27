@@ -85,6 +85,7 @@ const handleQA = async (context: Context, pr: PullRequest) => {
           comment.details("Output", comment.codeBlock(output)),
         ];
         await createComment(context, body);
+        await setCommitStatus(context, "success");
       } catch (e) {
         await handleError(
           context,
