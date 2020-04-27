@@ -1,6 +1,8 @@
 import { Application, Context, GitHubAPI } from "probot";
 import adapt from "probot-actions-adapter";
 
+import { commandMatches, createComment, setCommitStatus } from "./utils";
+import { debug, error } from "./logging";
 import { shell, shellOutput, ShellError } from "./shell";
 import * as comment from "./comment";
 
@@ -13,9 +15,6 @@ type Deployment = UnwrapList<
 type PullRequest = UnwrapList<
   UnwrapPromise<ReturnType<GitHubAPI["pulls"]["get"]>>["data"]
 >;
-type CommitStatusState = NonNullable<
-  UnwrapList<Parameters<GitHubAPI["repos"]["createStatus"]>>
->["state"];
 type DeploymentStatusState = NonNullable<
   UnwrapList<Parameters<GitHubAPI["repos"]["createDeploymentStatus"]>>
 >["state"];
@@ -37,45 +36,11 @@ const config = {
   releaseCommand: input("release"),
 };
 
-// From https://github.com/probot/commands/blob/master/index.js
-const commandMatches = (context: Context, match: string): boolean => {
-  // tslint:disable:no-shadowed-variable
-  const { comment, issue, pull_request: pr } = context.payload;
-  const command = (comment || issue || pr).body.match(/^\/([\w]+)\b *(.*)?$/m);
-  return command && command[1] === match;
-};
-
-const createComment = (context: Context, body: string[]) => {
-  const issueComment = context.issue({ body: body.join("\n") });
-  return context.github.issues.createComment(issueComment);
-};
-
-// GitHub Actions Annotations
-// const warning = (message: string) => console.log(`::warning::${message}`);
-const error = (message: string) => console.log(`::error::${message}`);
-const debug = (message: string) => console.log(`::debug::${message}`);
-
 const errorMessage = (e: any) => {
   if (e instanceof Error && e.message) {
     return e.message;
   } else {
     return e.toString();
-  }
-};
-
-const setCommitStatus = async (context: Context, state: CommitStatusState) => {
-  const pr = await context.github.pulls.get(context.issue());
-  if (pr) {
-    const { sha } = pr.data.head;
-    return context.github.repos.createStatus(
-      context.repo({
-        sha,
-        state,
-        context: config.statusCheckContext,
-      })
-    );
-  } else {
-    return Promise.resolve();
   }
 };
 
@@ -211,6 +176,57 @@ const handleError = async (context: Context, text: string, e: Error) => {
   error(message);
 };
 
+const handleQA = async (context: Context, pr: PullRequest) => {
+  const environment = config.preProductionEnvironment;
+  const deployment = await findDeployment(context, environment);
+  if (commandMatches(context, "qa")) {
+    if (environmentIsAvailable(context, deployment)) {
+      try {
+        const { ref } = pr.head;
+        await checkoutPullRequest(pr);
+        try {
+          await updatePullRequest(pr);
+        } catch (e) {
+          handleError(
+            context,
+            `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}`,
+            e
+          );
+          return;
+        }
+        const version = await getShortCommit();
+        const output = await handleDeploy(
+          context,
+          version,
+          environment,
+          { pr: context.issue().number },
+          [
+            `export RELEASE_BRANCH=${ref}`,
+            config.releaseCommand,
+            config.deployCommand,
+          ]
+        );
+        const body = [
+          comment.mention(
+            `deployed ${version} to ${environment} (${comment.runLink(
+              "Details"
+            )})`
+          ),
+          comment.details("Output", comment.codeBlock(output)),
+        ];
+        await createComment(context, body);
+      } catch (e) {
+        handleError(context, `release and deploy to ${environment} failed`, e);
+      }
+    } else {
+      const prNumber = deploymentPullRequestNumber(deployment);
+      const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
+      await createComment(context, [comment.mention(message)]);
+      error(message);
+    }
+  }
+};
+
 const probot = (app: Application) => {
   // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
   // https://help.github.com/en/actions/reference/events-that-trigger-workflows
@@ -221,61 +237,29 @@ const probot = (app: Application) => {
 
   app.on(["issue_comment.created", "pull_request.opened"], async (context) => {
     const pr = await context.github.pulls.get(context.issue());
-    if (pr) {
-      const environment = config.preProductionEnvironment;
-      const deployment = await findDeployment(context, environment);
-      if (commandMatches(context, "qa")) {
-        if (environmentIsAvailable(context, deployment)) {
-          try {
-            const { ref } = pr.data.head;
-            await checkoutPullRequest(pr.data);
-            try {
-              await updatePullRequest(pr.data);
-            } catch (e) {
-              handleError(
-                context,
-                `I failed to bring ${pr.data.head.ref} up-to-date with ${pr.data.base.ref}`,
-                e
-              );
-              return;
-            }
-            const version = await getShortCommit();
-            const output = await handleDeploy(
-              context,
-              version,
-              environment,
-              { pr: context.issue().number },
-              [
-                `export RELEASE_BRANCH=${ref}`,
-                config.releaseCommand,
-                config.deployCommand,
-              ]
-            );
-            const body = [
-              comment.mention(
-                `deployed ${version} to ${environment} (${comment.runLink(
-                  "Details"
-                )})`
-              ),
-              comment.details("Output", comment.codeBlock(output)),
-            ];
-            await createComment(context, body);
-          } catch (e) {
-            handleError(
-              context,
-              `release and deploy to ${environment} failed`,
-              e
-            );
-          }
-        } else {
-          const prNumber = deploymentPullRequestNumber(deployment);
-          const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
-          await createComment(context, [comment.mention(message)]);
-          error(message);
-        }
-      }
-    } else {
+
+    if (!pr) {
       debug(`No pull request associated with comment ${context.issue()}`);
+      return;
+    }
+
+    switch (true) {
+      case commandMatches(context, "skip-qa"): {
+        await Promise.all([
+          setCommitStatus(context, "success"),
+          createComment(context, ["Skipping QA 🤠"]),
+        ]);
+        break;
+      }
+
+      case commandMatches(context, "qa"): {
+        await handleQA(context, pr.data);
+        break;
+      }
+
+      default: {
+        debug("Unknown command", context);
+      }
     }
   });
 };

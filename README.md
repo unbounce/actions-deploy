@@ -23,7 +23,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     # Should be inverse of `if` below
-    if: "!((github.event_name == 'push' && github.ref == 'master') || (startsWith(github.event_name, 'issue_comment') && contains(github.event.comment, '/qa')))"
+    if: "!((github.event_name == 'push' && github.ref == 'master') || (startsWith(github.event_name, 'issue_comment') && contains(github.event.comment.body, '/qa')))"
     steps:
     - uses: actions/checkout@master
     - uses: unbounce/actions-deploy@master
@@ -39,7 +39,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     # Should be inverse of `if` above
-    if: "(github.event_name == 'push' && github.ref == 'master') || (startsWith(github.event_name, 'issue_comment') && contains(github.event.comment, '/qa'))"
+    if: "(github.event_name == 'push' && github.ref == 'master') || (startsWith(github.event_name, 'issue_comment') && contains(github.event.comment.body, '/qa'))"
     steps:
     - uses: actions/checkout@master
     - uses: unbounce/actions-deploy@master
