@@ -25491,7 +25491,7 @@ const handleQA = async (context, pr) => {
                     await git_1.updatePullRequest(pr);
                 }
                 catch (e) {
-                    utils_1.handleError(context, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}`, e);
+                    utils_1.handleError(context, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`, e);
                     return;
                 }
                 const version = await git_1.getShortCommit();

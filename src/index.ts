@@ -59,7 +59,7 @@ const handleQA = async (context: Context, pr: PullRequest) => {
         } catch (e) {
           handleError(
             context,
-            `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}`,
+            `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`,
             e
           );
           return;
