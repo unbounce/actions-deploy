@@ -231,7 +231,7 @@ const checkoutPullRequest = (pr: PullRequest) => {
   const { sha, ref } = pr.head;
   return shell([
     `git fetch origin ${sha}:refs/remotes/origin/${ref}`,
-    `git checkout ${ref}`,
+    `git checkout -b ${ref}`,
   ]);
 };
 
@@ -241,6 +241,7 @@ const updatePullRequest = async (pr: PullRequest) => {
   const baseBranch = pr.base.ref;
   try {
     return await shell([
+      `git fetch --unshallow`,
       `git pull --rebase origin ${baseBranch}`,
       `git push --force-with-lease origin ${currentBranch}`,
     ]);
