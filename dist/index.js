@@ -24953,7 +24953,9 @@ const handleQA = async (context, pr) => {
         }
     }
 };
-// If the deployed pull request for an environment is not the one contained in `context`,
+// If the deployed pull request for an environment is not the one contained in
+// `context`, set its commit status to pending and notify that its base has
+// changed.
 const invalidateDeployedPullRequest = async (context) => {
     // TODO don't hardcode environment
     const environment = "integration";
