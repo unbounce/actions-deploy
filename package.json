@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@octokit/rest": "^17.1.4",
+    "@octokit/webhooks": "^7.4.0",
     "probot": "^9.11.2",
     "probot-actions-adapter": "^1.0.4"
   },
@@ -43,6 +44,8 @@
       "prettier --write",
       "bash -c 'npm run build && git add dist/index.js'"
     ],
-    "package(-lock)?.json": ["bash -c 'npm run build && git add dist/index.js'"]
+    "package(-lock)?.json": [
+      "bash -c 'npm run build && git add dist/index.js'"
+    ]
   }
 }

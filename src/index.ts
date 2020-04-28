@@ -2,6 +2,7 @@ import { Application, Context } from "probot";
 import adapt from "probot-actions-adapter";
 
 import { config } from "./config";
+import type Webhooks from "@octokit/webhooks";
 import {
   commandMatches,
   createComment,
@@ -85,7 +86,7 @@ const handleQA = async (context: Context, pr: PullRequest) => {
           comment.details("Output", comment.codeBlock(output)),
         ];
         await createComment(context, body);
-        await setCommitStatus(context, "success");
+        await setCommitStatus(context, pr, "success");
       } catch (e) {
         await handleError(
           context,
@@ -100,6 +101,52 @@ const handleQA = async (context: Context, pr: PullRequest) => {
       error(message);
     }
   }
+}
+
+// If the deployed pull request for an environment is not the one contained in `context`,
+const invalidateDeployedPullRequest = async (
+  context: Context<Webhooks.WebhookPayloadPullRequest>
+) => {
+  // TODO don't hardcode environment
+  const environment = "integration";
+  const deployment = await findDeployment(context, environment);
+  const prNumber = context.payload.pull_request.id;
+  const baseRef = context.payload.pull_request.base.ref;
+  const deployedPrNumber = deploymentPullRequestNumber(deployment);
+  if (typeof deployedPrNumber === "number") {
+    if (deployedPrNumber === prNumber) {
+      debug(
+        "This pull request is currently deployed to ${environment} - nothing to do"
+      );
+    } else {
+      const deployedPr = await context.github.pulls.get(
+        context.repo({ pull_number: deployedPrNumber })
+      );
+      // If bases are the same, invalidate it
+      if (baseRef === deployedPr.data.base.ref) {
+        debug(
+          `The pull request currently deployed to ${environment} (#${deployedPr}) has the same base (${baseRef}) - invalidating it`
+        );
+        const body = `This pull request is no longer up-to-date with ${baseRef} (because #${prNumber} was just merged which changed ${baseRef}). Run /qa to redeployed your changes to ${environment} or /skip-qa if you want to ignore the changes in master.`;
+        const issueComment = context.repo({
+          body,
+          issue_number: deployedPrNumber,
+        });
+        await Promise.all([
+          setCommitStatus(context, deployedPr.data, "pending"),
+          context.github.issues.createComment(issueComment),
+        ]);
+      } else {
+        debug(
+          `The pull request currently deployed to ${environment} (#${deployedPr}) has a different base (${deployedPr.data.base.ref} != ${baseRef}) - nothing to do`
+        );
+      }
+    }
+  } else {
+    debug(
+      "No pull request currently deployed to ${environment} - nothing to do"
+    );
+  }
 };
 
 const probot = (app: Application) => {
@@ -107,7 +154,8 @@ const probot = (app: Application) => {
   // https://help.github.com/en/actions/reference/events-that-trigger-workflows
 
   app.on(["pull_request.opened", "pull_request.reopened"], async (context) => {
-    await setCommitStatus(context, "pending");
+    const pr = await context.github.pulls.get(context.issue());
+    await setCommitStatus(context, pr.data, "pending");
   });
 
   app.on(["issue_comment.created", "pull_request.opened"], async (context) => {
@@ -121,7 +169,7 @@ const probot = (app: Application) => {
     switch (true) {
       case commandMatches(context, "skip-qa"): {
         await Promise.all([
-          setCommitStatus(context, "success"),
+          setCommitStatus(context.issue(), pr.data, "success"),
           createComment(context, ["Skipping QA 🤠"]),
         ]);
         break;
@@ -135,6 +183,17 @@ const probot = (app: Application) => {
       default: {
         debug("Unknown command", context);
       }
+    }
+  });
+
+  app.on("pull_request.closed", async (context) => {
+    // "If the action is closed and the merged key is true, the pull request was merged"
+    // https://developer.github.com/v3/activity/events/types/#pullrequestevent
+    if (
+      context.payload.action === "closed" &&
+      context.payload.pull_request.merged
+    ) {
+      await invalidateDeployedPullRequest(context);
     }
   });
 };

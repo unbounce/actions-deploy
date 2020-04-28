@@ -24939,7 +24939,7 @@ const handleQA = async (context, pr) => {
                     comment.details("Output", comment.codeBlock(output)),
                 ];
                 await utils_1.createComment(context, body);
-                await utils_1.setCommitStatus(context, "success");
+                await utils_1.setCommitStatus(context, pr, "success");
             }
             catch (e) {
                 await utils_1.handleError(context, `release and deploy to ${environment} failed`, e);
@@ -24953,11 +24953,48 @@ const handleQA = async (context, pr) => {
         }
     }
 };
+// If the deployed pull request for an environment is not the one contained in `context`,
+const invalidateDeployedPullRequest = async (context) => {
+    // TODO don't hardcode environment
+    const environment = "integration";
+    const deployment = await utils_1.findDeployment(context, environment);
+    const prNumber = context.payload.pull_request.id;
+    const baseRef = context.payload.pull_request.base.ref;
+    const deployedPrNumber = utils_1.deploymentPullRequestNumber(deployment);
+    if (typeof deployedPrNumber === "number") {
+        if (deployedPrNumber === prNumber) {
+            logging_1.debug("This pull request is currently deployed to ${environment} - nothing to do");
+        }
+        else {
+            const deployedPr = await context.github.pulls.get(context.repo({ pull_number: deployedPrNumber }));
+            // If bases are the same, invalidate it
+            if (baseRef === deployedPr.data.base.ref) {
+                logging_1.debug(`The pull request currently deployed to ${environment} (#${deployedPr}) has the same base (${baseRef}) - invalidating it`);
+                const body = `This pull request is no longer up-to-date with ${baseRef} (because #${prNumber} was just merged which changed ${baseRef}). Run /qa to redeployed your changes to ${environment} or /skip-qa if you want to ignore the changes in master.`;
+                const issueComment = context.repo({
+                    body,
+                    issue_number: deployedPrNumber,
+                });
+                await Promise.all([
+                    utils_1.setCommitStatus(context, deployedPr.data, "pending"),
+                    context.github.issues.createComment(issueComment),
+                ]);
+            }
+            else {
+                logging_1.debug(`The pull request currently deployed to ${environment} (#${deployedPr}) has a different base (${deployedPr.data.base.ref} != ${baseRef}) - nothing to do`);
+            }
+        }
+    }
+    else {
+        logging_1.debug("No pull request currently deployed to ${environment} - nothing to do");
+    }
+};
 const probot = (app) => {
     // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
     // https://help.github.com/en/actions/reference/events-that-trigger-workflows
     app.on(["pull_request.opened", "pull_request.reopened"], async (context) => {
-        await utils_1.setCommitStatus(context, "pending");
+        const pr = await context.github.pulls.get(context.issue());
+        await utils_1.setCommitStatus(context, pr.data, "pending");
     });
     app.on(["issue_comment.created", "pull_request.opened"], async (context) => {
         const pr = await context.github.pulls.get(context.issue());
@@ -24968,7 +25005,7 @@ const probot = (app) => {
         switch (true) {
             case utils_1.commandMatches(context, "skip-qa"): {
                 await Promise.all([
-                    utils_1.setCommitStatus(context, "success"),
+                    utils_1.setCommitStatus(context.issue(), pr.data, "success"),
                     utils_1.createComment(context, ["Skipping QA 🤠"]),
                 ]);
                 break;
@@ -24980,6 +25017,14 @@ const probot = (app) => {
             default: {
                 logging_1.debug("Unknown command", context);
             }
+        }
+    });
+    app.on("pull_request.closed", async (context) => {
+        // "If the action is closed and the merged key is true, the pull request was merged"
+        // https://developer.github.com/v3/activity/events/types/#pullrequestevent
+        if (context.payload.action === "closed" &&
+            context.payload.pull_request.merged) {
+            await invalidateDeployedPullRequest(context);
         }
     });
 };
@@ -35712,9 +35757,8 @@ exports.createComment = (context, body) => {
     const issueComment = context.issue({ body: body.join("\n") });
     return context.github.issues.createComment(issueComment);
 };
-exports.setCommitStatus = async (context, state) => {
-    const pr = await context.github.pulls.get(context.issue());
-    const { sha } = pr.data.head;
+exports.setCommitStatus = async (context, pr, state) => {
+    const { sha } = pr.head;
     if (pr) {
         return context.github.repos.createStatus(context.repo({
             sha,
