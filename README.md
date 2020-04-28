@@ -9,7 +9,7 @@ Create a workflow in your repository (such as `.github/workflows/deployment.yaml
 ```yaml
 on:
   pull_request:
-    types: [opened, reopened]
+    types: [opened, reopened, closed]
   push:
     branches: [master]
   issue_comment: {}
