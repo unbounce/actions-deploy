@@ -24958,7 +24958,7 @@ const invalidateDeployedPullRequest = async (context) => {
     // TODO don't hardcode environment
     const environment = "integration";
     const deployment = await utils_1.findDeployment(context, environment);
-    const prNumber = context.payload.pull_request.id;
+    const prNumber = context.payload.pull_request.number;
     const baseRef = context.payload.pull_request.base.ref;
     const deployedPrNumber = utils_1.deploymentPullRequestNumber(deployment);
     if (typeof deployedPrNumber === "number") {
