@@ -109,8 +109,7 @@ const handleQA = async (context: Context, pr: PullRequest) => {
 const invalidateDeployedPullRequest = async (
   context: Context<Webhooks.WebhookPayloadPullRequest>
 ) => {
-  // TODO don't hardcode environment
-  const environment = "integration";
+  const environment = config.preProductionEnvironment;
   const deployment = await findDeployment(context, environment);
   const prNumber = context.payload.pull_request.number;
   const baseRef = context.payload.pull_request.base.ref;

@@ -24957,8 +24957,7 @@ const handleQA = async (context, pr) => {
 // `context`, set its commit status to pending and notify that its base has
 // changed.
 const invalidateDeployedPullRequest = async (context) => {
-    // TODO don't hardcode environment
-    const environment = "integration";
+    const environment = config_1.config.preProductionEnvironment;
     const deployment = await utils_1.findDeployment(context, environment);
     const prNumber = context.payload.pull_request.number;
     const baseRef = context.payload.pull_request.base.ref;
