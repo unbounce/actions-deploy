@@ -137,7 +137,7 @@ const invalidateDeployedPullRequest = async (
           )} if you want to ignore the changes in ${baseRef}.`,
           `Note that using ${comment.code(
             "/skip-qa"
-          )} will cause the new changes in ${baseRef} to not be included when this pull request is merged, and its changes deployed to ${
+          )} will cause the new changes in ${baseRef} to be excluded when this pull request is merged, and they will not be deployed to ${
             config.productionEnvironment
           }.`,
         ].join(" ");
