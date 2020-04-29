@@ -28116,9 +28116,9 @@ const prettyStringify = (thing) => {
     return String(thing);
 };
 const stringifyArgs = (...args) => args.map(prettyStringify).join("\n");
-exports.warning = (...args) => console.log(`::warning ${stringifyArgs(args)}`);
-exports.error = (...args) => console.log(`::error ${stringifyArgs(args)}`);
-exports.debug = (...args) => console.log(`::debug ${stringifyArgs(args)}`);
+exports.warning = (...args) => console.log(`::warning::${stringifyArgs(args)}`);
+exports.error = (...args) => console.log(`::error::${stringifyArgs(args)}`);
+exports.debug = (...args) => console.log(`::debug::${stringifyArgs(args)}`);
 
 
 /***/ }),
