@@ -60,7 +60,13 @@ const handleQA = async (context: Context, pr: PullRequest) => {
         } catch (e) {
           await handleError(
             context,
-            `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`,
+            `I failed to bring ${comment.code(
+              pr.head.ref
+            )} up-to-date with ${comment.code(
+              pr.base.ref
+            )}. Please resolve conflicts before running ${comment.code(
+              "/qa"
+            )} again.`,
             e
           );
           return;
@@ -129,15 +135,21 @@ const invalidateDeploymentAfterPullRequestMerged = async (
           `The pull request currently deployed to ${environment} (#${deployedPr}) has the same base (${baseRef}) - invalidating it`
         );
         const body = [
-          `This pull request is no longer up-to-date with ${baseRef} (because #${prNumber} was just merged, which changed ${baseRef}).`,
+          `This pull request is no longer up-to-date with ${comment.code(
+            baseRef
+          )} (because #${prNumber} was just merged, which changed ${comment.code(
+            baseRef
+          )}).`,
           `Run ${comment.code(
             "/qa"
           )} to redeploy your changes to ${environment} or ${comment.code(
             "/skip-qa"
-          )} if you want to ignore the changes in ${baseRef}.`,
+          )} if you want to ignore the changes in ${comment.code(baseRef)}.`,
           `Note that using ${comment.code(
             "/skip-qa"
-          )} will cause the new changes in ${baseRef} to be excluded when this pull request is merged, and they will not be deployed to ${
+          )} will cause the new changes in ${comment.code(
+            baseRef
+          )} to be excluded when this pull request is merged, and they will not be deployed to ${
             config.productionEnvironment
           }.`,
         ].join(" ");
@@ -184,15 +196,21 @@ const invalidateDeploymentAfterMasterPushed = async (
       } else {
         // Invalidate
         const body = [
-          `This pull request is no longer up-to-date with ${pushedRef} (because changes were pushed directly to ${pushedRef}).`,
+          `This pull request is no longer up-to-date with ${comment.code(
+            pushedRef
+          )} (because changes were pushed directly to ${comment.code(
+            pushedRef
+          )}).`,
           `Run ${comment.code(
             "/qa"
           )} to redeploy your changes to ${environment} or ${comment.code(
             "/skip-qa"
-          )} if you want to ignore the changes in ${pushedRef}.`,
+          )} if you want to ignore the changes in ${comment.code(pushedRef)}.`,
           `Note that using ${comment.code(
             "/skip-qa"
-          )} will cause the new changes in ${pushedRef} to be excluded when this pull request is merged, and they will not be deployed to ${
+          )} will cause the new changes in ${comment.code(
+            pushedRef
+          )} to be excluded when this pull request is merged, and they will not be deployed to ${
             config.productionEnvironment
           }.`,
         ].join(" ");
