@@ -28,7 +28,8 @@ jobs:
     - uses: actions/checkout@master
     - uses: unbounce/actions-deploy@master
       with:
-        type: ui # or 'lambda' or 'kube'
+        release: make release # or: npm run release
+        deploy: make deploy # or: npm run deploy --environment "$ENVIRONMENT" --version "$VERSION"
 
   # Events that require access to AWS resources for deployments
   deployment:
@@ -43,7 +44,8 @@ jobs:
     - uses: actions/checkout@master
     - uses: unbounce/actions-deploy@master
       with:
-        type: ui # or 'lambda' or 'kube'
+        release: make release # or: npm run release
+        deploy: make deploy # or: npm run deploy --environment "$ENVIRONMENT" --version "$VERSION"
 ```
 
 ### Configuration
@@ -52,7 +54,8 @@ This action can be configured via the `with` section with the following configur
 
 |Name|Required|Default|Notes|
 |----|--------|-------|-----|
-|`type`|Yes||Must be one of `ui`, `lambda`, or `kube`|
+|`release`|Yes||Command to run to perform release. Command is expected to create a release identified by the short git sha (`git rev-parse --short HEAD`). Environment variable `VERSION` will be available, or `git rev-parse --short HEAD` can be run to generate version.|
+|`deploy`|Yes||Command to run to perform deploy. Environment variables `ENVIRONMENT` and `VERSION` will be available.|
 |`master-branch`|No|`master`||
 |`production-environment`|No|`production`||
 |`pre-production-environment`|No|`integration`||

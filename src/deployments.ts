@@ -1,7 +1,6 @@
 import { exec } from "child_process";
 import { Context } from "probot";
 import { DeploymentStatusState, Deployment } from "./types";
-import { DeploymentType } from "./config";
 
 export const findDeployment = async (context: Context, environment: string) => {
   const deployments = await context.github.repos.listDeployments(
@@ -96,11 +95,4 @@ export const handleDeploy = async (
     await setDeploymentStatus(context, id, "error");
     throw e;
   }
-};
-
-export const deployCommands: {
-  [K in DeploymentType]: { deploy: string; release: string };
-} = {
-  npm: { deploy: "echo npm run deploy", release: "echo npm run release" },
-  make: { deploy: "echo make deploy", release: "echo make release" },
 };

@@ -1,19 +1,23 @@
 name: actions-deploy
 description: GitHub Actions-Based Release and Deployment
 inputs:
-  type:
-    description: 'The deployment type: ui, lambda, or kube'
+  release:
+    description: Command to run to perform release. Command is expected to create a release identified by the short git sha (`git rev-parse --short HEAD`). Environment variable `VERSION` will be available, or `git rev-parse --short HEAD` can be run to generate version.
     required: true
+  deploy:
+    description: Command to run to perform deploy. Environment variables `ENVIRONMENT` and `VERSION` will be available.
+    required: true
+
   main-branch:
-    description: The name of the main branch for this repository
+    description: Name of the main branch for this repository
     required: false
     default: master
   production-environment:
-    description: The name of the production environment
+    description: Name of the production environment
     required: false
     default: production
   pre-production-environment:
-    description: The name of the pre-production environment
+    description: Name of the pre-production environment
     required: false
     default: integration
 runs:
