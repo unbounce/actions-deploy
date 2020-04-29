@@ -5,7 +5,7 @@ import { config } from "./config";
 import * as comment from "./comment";
 import { ShellError } from "./shell";
 import { error } from "./logging";
-import { Deployment, DeploymentStatusState } from "./types";
+import { Deployment, PullRequest, DeploymentStatusState } from "./types";
 
 // From https://github.com/probot/commands/blob/master/index.js
 export const commandMatches = (context: Context, match: string): boolean => {
@@ -22,10 +22,10 @@ export const createComment = (context: Context, body: string[]) => {
 
 export const setCommitStatus = async (
   context: Context,
+  pr: PullRequest,
   state: Octokit["ReposCreateStatusParams"]["state"]
 ) => {
-  const pr = await context.github.pulls.get(context.issue());
-  const { sha } = pr.data.head;
+  const { sha } = pr.head;
   if (pr) {
     return context.github.repos.createStatus(
       context.repo({

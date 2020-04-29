@@ -9,13 +9,15 @@ Create a workflow in your repository (such as `.github/workflows/deployment.yaml
 ```yaml
 on:
   pull_request:
-    types: [opened, reopened]
+    types: [opened, reopened, closed]
   push:
     branches: [master]
   issue_comment: {}
 
 name: Deployment
 jobs:
+
+  # Deployment automation tasks
   automation:
     name: Deployment Automation
     runs-on: ubuntu-latest
@@ -25,13 +27,15 @@ jobs:
     # Should be inverse of `if` below
     if: "!((github.event_name == 'push' && github.ref == 'master') || (startsWith(github.event_name, 'issue_comment') && contains(github.event.comment.body, '/qa')))"
     steps:
-    - uses: actions/checkout@master
+    # These tasks do not actually need a copy of the repository because it only performs automation tasks with the GitHub API
+    # - uses: actions/checkout@master
     - uses: unbounce/actions-deploy@master
       with:
         release: make release # or: npm run release
         deploy: make deploy # or: npm run deploy --environment "$ENVIRONMENT" --version "$VERSION"
 
-  # Events that require access to AWS resources for deployments
+  # Deployment tasks - this is where the actual deployment takes place
+  # Runs on self-hosted runners so that it can have access to AWS resources for deployments
   deployment:
     name: Deployment
     runs-on: self-hosted
