@@ -101,7 +101,7 @@ const handleQA = async (context: Context, pr: PullRequest) => {
       error(message);
     }
   }
-}
+};
 
 // If the deployed pull request for an environment is not the one contained in
 // `context`, set its commit status to pending and notify that its base has
@@ -129,7 +129,19 @@ const invalidateDeployedPullRequest = async (
         debug(
           `The pull request currently deployed to ${environment} (#${deployedPr}) has the same base (${baseRef}) - invalidating it`
         );
-        const body = `This pull request is no longer up-to-date with ${baseRef} (because #${prNumber} was just merged which changed ${baseRef}). Run /qa to redeployed your changes to ${environment} or /skip-qa if you want to ignore the changes in master.`;
+        const body = [
+          `This pull request is no longer up-to-date with ${baseRef} (because #${prNumber} was just merged, which changed ${baseRef}).`,
+          `Run ${comment.code(
+            "/qa"
+          )} to redeploy your changes to ${environment} or ${comment.code(
+            "/skip-qa"
+          )} if you want to ignore the changes in ${baseRef}.`,
+          `Note that using ${comment.code(
+            "/skip-qa"
+          )} will cause the new changes in ${baseRef} to not be included when this pull request is merged, and its changes deployed to ${
+            config.productionEnvironment
+          }.`,
+        ].join(" ");
         const issueComment = context.repo({
           body,
           issue_number: deployedPrNumber,
