@@ -25069,10 +25069,22 @@ const probot = (app) => {
             context.payload.pull_request.merged) {
             await invalidateDeploymentAfterPullRequestMerged(context);
         }
+        else {
+            logging_1.debug(`Closed pull request was not merged (action: ${context.payload.action}, merged: ${context.payload.pull_request.merged})`);
+        }
     });
     app.on("push", async (context) => {
         if (context.payload.ref === "refs/heads/master") {
-            await invalidateDeploymentAfterMasterPushed(context);
+            const prs = await context.github.repos.listPullRequestsAssociatedWithCommit(context.repo({ commit_sha: context.payload.after }));
+            if (prs.data.every((pr) => !pr.merged_at)) {
+                await invalidateDeploymentAfterMasterPushed(context);
+            }
+            else {
+                logging_1.debug(`Push ref was part of a merged pull request: ${context.payload.ref}`);
+            }
+        }
+        else {
+            logging_1.debug(`Push ref was not for master: ${context.payload.ref}`);
         }
     });
 };
