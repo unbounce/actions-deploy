@@ -25012,7 +25012,7 @@ const invalidateDeploymentAfterMasterPushed = async (context) => {
                 const body = [
                     `This pull request is no longer up-to-date with ${pushedRef} (because changes were pushed directly to ${pushedRef}).`,
                     `Run ${comment.code("/qa")} to redeploy your changes to ${environment} or ${comment.code("/skip-qa")} if you want to ignore the changes in ${pushedRef}.`,
-                    `Note that using ${comment.code("/skip-qa")} will cause the new changes in ${pushedRef} to not be included when this pull request is merged, and its changes deployed to ${config_1.config.productionEnvironment}.`,
+                    `Note that using ${comment.code("/skip-qa")} will cause the new changes in ${pushedRef} to be excluded when this pull request is merged, and they will not be deployed to ${config_1.config.productionEnvironment}.`,
                 ].join(" ");
                 const issueComment = context.repo({
                     body,

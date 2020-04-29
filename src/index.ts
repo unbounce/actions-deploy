@@ -192,7 +192,7 @@ const invalidateDeploymentAfterMasterPushed = async (
           )} if you want to ignore the changes in ${pushedRef}.`,
           `Note that using ${comment.code(
             "/skip-qa"
-          )} will cause the new changes in ${pushedRef} to not be included when this pull request is merged, and its changes deployed to ${
+          )} will cause the new changes in ${pushedRef} to be excluded when this pull request is merged, and they will not be deployed to ${
             config.productionEnvironment
           }.`,
         ].join(" ");
