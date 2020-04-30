@@ -8,6 +8,10 @@ inputs:
     description: Command to run to perform deploy. Environment variables `ENVIRONMENT` and `VERSION` will be available.
     required: true
 
+  verify:
+    description: Command to run to verify a deployment. Environment variables `ENVIRONMENT` and `VERSION` will be available.
+    required: false
+    default: ''
   main-branch:
     description: Name of the main branch for this repository
     required: false

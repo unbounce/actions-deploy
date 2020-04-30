@@ -47,13 +47,65 @@ const handleDeploy = async (
   }
 };
 
+const releaseAndDeploy = async (
+  context: Context,
+  version: string,
+  environment: string,
+  ref: string
+) => {
+  const output = await handleDeploy(
+    context,
+    version,
+    environment,
+    { pr: context.issue().number },
+    [
+      `export RELEASE_BRANCH=${ref}`,
+      config.releaseCommand,
+      config.deployCommand,
+    ]
+  );
+  const body = [
+    comment.mention(
+      `deployed ${version} to ${environment} (${comment.runLink("Details")})`
+    ),
+    comment.details("Output", comment.codeBlock(output)),
+  ];
+  await createComment(context, body);
+};
+
+const verifyDeployment = async (
+  context: Context,
+  version: string,
+  environment: string
+) => {
+  if (config.verifyCommand) {
+    const output = await handleDeploy(
+      context,
+      version,
+      environment,
+      { pr: context.issue().number },
+      [config.verifyCommand]
+    );
+    const body = [
+      comment.mention(
+        `verified deployment of ${version} in ${environment} (${comment.runLink(
+          "Details"
+        )})`
+      ),
+      comment.details("Output", comment.codeBlock(output)),
+    ];
+    await createComment(context, body);
+  } else {
+    debug(`No verify command provided - not verifying deployment`);
+  }
+};
+
 const handleQA = async (context: Context, pr: PullRequest) => {
   const environment = config.preProductionEnvironment;
   const deployment = await findDeployment(context, environment);
   if (commandMatches(context, "qa")) {
     if (environmentIsAvailable(context, deployment)) {
       try {
-        const { ref } = pr.head;
         await checkoutPullRequest(pr);
         try {
           await updatePullRequest(pr);
@@ -65,28 +117,18 @@ const handleQA = async (context: Context, pr: PullRequest) => {
           );
           return;
         }
+        const { ref } = pr.head;
         const version = await getShortCommit();
-        const output = await handleDeploy(
-          context,
-          version,
-          environment,
-          { pr: context.issue().number },
-          [
-            `export RELEASE_BRANCH=${ref}`,
-            config.releaseCommand,
-            config.deployCommand,
-          ]
-        );
-        const body = [
-          comment.mention(
-            `deployed ${version} to ${environment} (${comment.runLink(
-              "Details"
-            )})`
-          ),
-          comment.details("Output", comment.codeBlock(output)),
-        ];
-        await createComment(context, body);
-        await setCommitStatus(context, pr, "success");
+        await releaseAndDeploy(context, version, environment, ref);
+        try {
+          await verifyDeployment(context, version, environment);
+        } catch (e) {
+          await handleError(
+            context,
+            `verifying deployment in ${environment} failed`,
+            e
+          );
+        }
       } catch (e) {
         await handleError(
           context,

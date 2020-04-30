@@ -24913,13 +24913,37 @@ const handleDeploy = async (context, version, environment, payload, commands) =>
         throw e;
     }
 };
+const releaseAndDeploy = async (context, version, environment, ref) => {
+    const output = await handleDeploy(context, version, environment, { pr: context.issue().number }, [
+        `export RELEASE_BRANCH=${ref}`,
+        config_1.config.releaseCommand,
+        config_1.config.deployCommand,
+    ]);
+    const body = [
+        comment.mention(`deployed ${version} to ${environment} (${comment.runLink("Details")})`),
+        comment.details("Output", comment.codeBlock(output)),
+    ];
+    await utils_1.createComment(context, body);
+};
+const verifyDeployment = async (context, version, environment) => {
+    if (config_1.config.verifyCommand) {
+        const output = await handleDeploy(context, version, environment, { pr: context.issue().number }, [config_1.config.verifyCommand]);
+        const body = [
+            comment.mention(`verified deployment of ${version} in ${environment} (${comment.runLink("Details")})`),
+            comment.details("Output", comment.codeBlock(output)),
+        ];
+        await utils_1.createComment(context, body);
+    }
+    else {
+        logging_1.debug(`No verify command provided - not verifying deployment`);
+    }
+};
 const handleQA = async (context, pr) => {
     const environment = config_1.config.preProductionEnvironment;
     const deployment = await utils_1.findDeployment(context, environment);
     if (utils_1.commandMatches(context, "qa")) {
         if (utils_1.environmentIsAvailable(context, deployment)) {
             try {
-                const { ref } = pr.head;
                 await git_1.checkoutPullRequest(pr);
                 try {
                     await git_1.updatePullRequest(pr);
@@ -24928,18 +24952,15 @@ const handleQA = async (context, pr) => {
                     await utils_1.handleError(context, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`, e);
                     return;
                 }
+                const { ref } = pr.head;
                 const version = await git_1.getShortCommit();
-                const output = await handleDeploy(context, version, environment, { pr: context.issue().number }, [
-                    `export RELEASE_BRANCH=${ref}`,
-                    config_1.config.releaseCommand,
-                    config_1.config.deployCommand,
-                ]);
-                const body = [
-                    comment.mention(`deployed ${version} to ${environment} (${comment.runLink("Details")})`),
-                    comment.details("Output", comment.codeBlock(output)),
-                ];
-                await utils_1.createComment(context, body);
-                await utils_1.setCommitStatus(context, pr, "success");
+                await releaseAndDeploy(context, version, environment, ref);
+                try {
+                    await verifyDeployment(context, version, environment);
+                }
+                catch (e) {
+                    await utils_1.handleError(context, `verifying deployment in ${environment} failed`, e);
+                }
             }
             catch (e) {
                 await utils_1.handleError(context, `release and deploy to ${environment} failed`, e);
@@ -57075,6 +57096,7 @@ exports.config = {
     preProductionEnvironment: input("pre-production-environment"),
     deployCommand: input("deploy"),
     releaseCommand: input("release"),
+    verifyCommand: input("verify"),
 };
 
 

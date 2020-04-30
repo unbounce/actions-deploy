@@ -33,6 +33,7 @@ jobs:
       with:
         release: make release # or: npm run release
         deploy: make deploy # or: npm run deploy --environment "$ENVIRONMENT" --version "$VERSION"
+        verify: make end-to-end-tests
 
   # Deployment tasks - this is where the actual deployment takes place
   # Runs on self-hosted runners so that it can have access to AWS resources for deployments
@@ -50,6 +51,7 @@ jobs:
       with:
         release: make release # or: npm run release
         deploy: make deploy # or: npm run deploy --environment "$ENVIRONMENT" --version "$VERSION"
+        verify: make end-to-end-tests
 ```
 
 ### Configuration

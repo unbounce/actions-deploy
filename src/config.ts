@@ -13,4 +13,5 @@ export const config = {
   preProductionEnvironment: input("pre-production-environment"),
   deployCommand: input("deploy"),
   releaseCommand: input("release"),
+  verifyCommand: input("verify"),
 };
