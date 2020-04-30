@@ -25076,11 +25076,12 @@ const probot = (app) => {
     app.on("push", async (context) => {
         if (context.payload.ref === "refs/heads/master") {
             const prs = await context.github.repos.listPullRequestsAssociatedWithCommit(context.repo({ commit_sha: context.payload.after }));
-            if (prs.data.every((pr) => !pr.merged_at)) {
+            const mergedPrs = prs.data.filter((pr) => !pr.merged_at);
+            if (mergedPrs.length === 0) {
                 await invalidateDeploymentAfterMasterPushed(context);
             }
             else {
-                logging_1.debug(`Push ref was part of a merged pull request: ${context.payload.ref}`);
+                logging_1.debug(`Push was part of a merged pull request: ${mergedPrs.map((pr) => `#${pr.number}`)}`);
             }
         }
         else {
