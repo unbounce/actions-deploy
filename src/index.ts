@@ -60,7 +60,13 @@ const handleQA = async (context: Context, pr: PullRequest) => {
         } catch (e) {
           await handleError(
             context,
-            `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`,
+            `I failed to bring ${comment.code(
+              pr.head.ref
+            )} up-to-date with ${comment.code(
+              pr.base.ref
+            )}. Please resolve conflicts before running ${comment.code(
+              "/qa"
+            )} again.`,
             e
           );
           return;
@@ -106,7 +112,7 @@ const handleQA = async (context: Context, pr: PullRequest) => {
 // If the deployed pull request for an environment is not the one contained in
 // `context`, set its commit status to pending and notify that its base has
 // changed.
-const invalidateDeployedPullRequest = async (
+const invalidateDeploymentAfterPullRequestMerged = async (
   context: Context<Webhooks.WebhookPayloadPullRequest>
 ) => {
   const environment = config.preProductionEnvironment;
@@ -129,15 +135,21 @@ const invalidateDeployedPullRequest = async (
           `The pull request currently deployed to ${environment} (#${deployedPr}) has the same base (${baseRef}) - invalidating it`
         );
         const body = [
-          `This pull request is no longer up-to-date with ${baseRef} (because #${prNumber} was just merged, which changed ${baseRef}).`,
+          `This pull request is no longer up-to-date with ${comment.code(
+            baseRef
+          )} (because #${prNumber} was just merged, which changed ${comment.code(
+            baseRef
+          )}).`,
           `Run ${comment.code(
             "/qa"
           )} to redeploy your changes to ${environment} or ${comment.code(
             "/skip-qa"
-          )} if you want to ignore the changes in ${baseRef}.`,
+          )} if you want to ignore the changes in ${comment.code(baseRef)}.`,
           `Note that using ${comment.code(
             "/skip-qa"
-          )} will cause the new changes in ${baseRef} to be excluded when this pull request is merged, and they will not be deployed to ${
+          )} will cause the new changes in ${comment.code(
+            baseRef
+          )} to be excluded when this pull request is merged, and they will not be deployed to ${
             config.productionEnvironment
           }.`,
         ].join(" ");
@@ -158,6 +170,69 @@ const invalidateDeployedPullRequest = async (
   } else {
     debug(
       "No pull request currently deployed to ${environment} - nothing to do"
+    );
+  }
+};
+
+// If the base for the deployed pull request matches is master set its commit
+// status to pending and notify that its base has changed.
+const invalidateDeploymentAfterMasterPushed = async (
+  context: Context<Webhooks.WebhookPayloadPush>
+) => {
+  const pushedRef = "master";
+  const environment = config.preProductionEnvironment;
+  const deployment = await findDeployment(context, environment);
+  const deployedPrNumber = deploymentPullRequestNumber(deployment);
+  if (typeof deployedPrNumber === "number") {
+    const deployedPr = await context.github.pulls.get(
+      context.repo({ pull_number: deployedPrNumber })
+    );
+    if (deployedPr.data.base.ref === pushedRef) {
+      if (deployedPr.data.merged) {
+        debug(
+          `Pull request deployed to ${environment} (#${deployedPr.data.number}) is merged - nothing to do`,
+          context
+        );
+      } else {
+        // Invalidate
+        const body = [
+          `This pull request is no longer up-to-date with ${comment.code(
+            pushedRef
+          )} (because changes were pushed directly to ${comment.code(
+            pushedRef
+          )}).`,
+          `Run ${comment.code(
+            "/qa"
+          )} to redeploy your changes to ${environment} or ${comment.code(
+            "/skip-qa"
+          )} if you want to ignore the changes in ${comment.code(pushedRef)}.`,
+          `Note that using ${comment.code(
+            "/skip-qa"
+          )} will cause the new changes in ${comment.code(
+            pushedRef
+          )} to be excluded when this pull request is merged, and they will not be deployed to ${
+            config.productionEnvironment
+          }.`,
+        ].join(" ");
+        const issueComment = context.repo({
+          body,
+          issue_number: deployedPrNumber,
+        });
+        await Promise.all([
+          setCommitStatus(context, deployedPr.data, "pending"),
+          context.github.issues.createComment(issueComment),
+        ]);
+      }
+    } else {
+      debug(
+        `Pull request deployed to ${environment} (#${deployedPr.data.number}) has a different base (${deployedPr.data.base.ref} != master) - nothing to do`,
+        context
+      );
+    }
+  } else {
+    debug(
+      `No pull request deployed to ${environment} - nothing to do`,
+      context
     );
   }
 };
@@ -206,7 +281,31 @@ const probot = (app: Application) => {
       context.payload.action === "closed" &&
       context.payload.pull_request.merged
     ) {
-      await invalidateDeployedPullRequest(context);
+      await invalidateDeploymentAfterPullRequestMerged(context);
+    } else {
+      debug(
+        `Closed pull request was not merged (action: ${context.payload.action}, merged: ${context.payload.pull_request.merged})`
+      );
+    }
+  });
+
+  app.on("push", async (context) => {
+    if (context.payload.ref === "refs/heads/master") {
+      const prs = await context.github.repos.listPullRequestsAssociatedWithCommit(
+        context.repo({ commit_sha: context.payload.after })
+      );
+      const mergedPrs = prs.data.filter((pr) => !pr.merged_at);
+      if (mergedPrs.length === 0) {
+        await invalidateDeploymentAfterMasterPushed(context);
+      } else {
+        debug(
+          `Push was part of a merged pull request: ${mergedPrs.map(
+            (pr) => `#${pr.number}`
+          )}`
+        );
+      }
+    } else {
+      debug(`Push ref was not for master: ${context.payload.ref}`);
     }
   });
 };
