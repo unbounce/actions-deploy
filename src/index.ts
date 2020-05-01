@@ -191,7 +191,10 @@ const probot = (app: Application) => {
       }
 
       case commandMatches(context, "qa"): {
-        await handleQA(context, pr.data);
+        await Promise.all([
+          setCommitStatus(context, pr.data, "pending"),
+          handleQA(context, pr.data),
+        ]);
         break;
       }
 

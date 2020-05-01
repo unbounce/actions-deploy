@@ -25087,7 +25087,10 @@ const probot = (app) => {
                 break;
             }
             case utils_1.commandMatches(context, "qa"): {
-                await handleQA(context, pr.data);
+                await Promise.all([
+                    utils_1.setCommitStatus(context, pr.data, "pending"),
+                    handleQA(context, pr.data),
+                ]);
                 break;
             }
             default: {
