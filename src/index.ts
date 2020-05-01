@@ -47,6 +47,49 @@ const handleDeploy = async (
   }
 };
 
+// If the PR was deployed to pre-production, then deploy it to production
+const handlePrMerged = async (
+  context: Context<Webhooks.WebhookPayloadPullRequest>,
+  pr: PullRequest
+) => {
+  const { productionEnvironment, preProductionEnvironment } = config;
+  const deployment = await findDeployment(context, preProductionEnvironment);
+
+  if (!deployment) {
+    debug(`No deployment found for ${preProductionEnvironment} - quitting`);
+    return;
+  }
+
+  const deployedPrNumber = deploymentPullRequestNumber(deployment);
+
+  if (deployedPrNumber !== pr.number) {
+    debug(
+      `${pr.number} was merged, but is not currently deployed to ${preProductionEnvironment} - quitting`
+    );
+    return;
+  }
+
+  if (deployment.sha !== pr.head.sha) {
+    const message = [
+      `⚠️ The deployment to ${preProductionEnvironment} was outdated, so I skipped deployment to ${productionEnvironment}.`,
+      comment.mention(
+        `, please check ${comment.code(
+          pr.base.ref
+        )} and deploy manually if necessary.`
+      ),
+    ];
+
+    await createComment(context, pr.number, message);
+    return;
+  }
+
+  debug(
+    `${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`
+  );
+
+  return deployPr(context, pr, productionEnvironment);
+};
+
 const deployPr = async (
   context: Context,
   pr: PullRequest,
@@ -260,13 +303,18 @@ const probot = (app: Application) => {
   });
 
   app.on("pull_request.closed", async (context) => {
+    const pr = await context.github.pulls.get(context.issue());
+
     // "If the action is closed and the merged key is true, the pull request was merged"
     // https://developer.github.com/v3/activity/events/types/#pullrequestevent
     if (
       context.payload.action === "closed" &&
       context.payload.pull_request.merged
     ) {
-      await invalidateDeployedPullRequest(context);
+      await Promise.all([
+        invalidateDeployedPullRequest(context),
+        handlePrMerged(context, pr.data),
+      ]);
     }
   });
 };
