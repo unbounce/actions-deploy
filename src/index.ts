@@ -47,59 +47,65 @@ const handleDeploy = async (
   }
 };
 
+const deployPr = async (
+  context: Context,
+  pr: PullRequest,
+  environment: string
+) => {
+  try {
+    const { ref } = pr.head;
+    await checkoutPullRequest(pr);
+    try {
+      await updatePullRequest(pr);
+    } catch (e) {
+      await handleError(
+        context,
+        pr.number,
+        `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`,
+        e
+      );
+      return;
+    }
+    const version = await getShortCommit();
+    const output = await handleDeploy(
+      context,
+      version,
+      environment,
+      { pr: pr.number },
+      [
+        `export RELEASE_BRANCH=${ref}`,
+        config.releaseCommand,
+        config.deployCommand,
+      ]
+    );
+    const body = [
+      comment.mention(
+        `deployed ${version} to ${environment} (${comment.runLink("Details")})`
+      ),
+      comment.details("Output", comment.codeBlock(output)),
+    ];
+    await createComment(context, pr.number, body);
+  } catch (e) {
+    await handleError(
+      context,
+      pr.number,
+      `release and deploy to ${environment} failed`,
+      e
+    );
+  }
+};
+
 const handleQA = async (context: Context, pr: PullRequest) => {
   const environment = config.preProductionEnvironment;
   const deployment = await findDeployment(context, environment);
-  if (commandMatches(context, "qa")) {
-    if (environmentIsAvailable(context, deployment)) {
-      try {
-        const { ref } = pr.head;
-        await checkoutPullRequest(pr);
-        try {
-          await updatePullRequest(pr);
-        } catch (e) {
-          await handleError(
-            context,
-            `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`,
-            e
-          );
-          return;
-        }
-        const version = await getShortCommit();
-        const output = await handleDeploy(
-          context,
-          version,
-          environment,
-          { pr: context.issue().number },
-          [
-            `export RELEASE_BRANCH=${ref}`,
-            config.releaseCommand,
-            config.deployCommand,
-          ]
-        );
-        const body = [
-          comment.mention(
-            `deployed ${version} to ${environment} (${comment.runLink(
-              "Details"
-            )})`
-          ),
-          comment.details("Output", comment.codeBlock(output)),
-        ];
-        await createComment(context, body);
-        await setCommitStatus(context, pr, "success");
-      } catch (e) {
-        await handleError(
-          context,
-          `release and deploy to ${environment} failed`,
-          e
-        );
-      }
-    } else {
-      const prNumber = deploymentPullRequestNumber(deployment);
-      const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
-      await createComment(context, [comment.mention(message)]);
-      error(message);
-    }
+
+  if (environmentIsAvailable(context, deployment)) {
+    await deployPr(context, pr, environment);
+  } else {
+    const prNumber = deploymentPullRequestNumber(deployment);
+    const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
+    await createComment(context, pr.number, [comment.mention(message)]);
+    error(message);
   }
 };
 
@@ -141,13 +147,9 @@ const invalidateDeployedPullRequest = async (
             config.productionEnvironment
           }.`,
         ].join(" ");
-        const issueComment = context.repo({
-          body,
-          issue_number: deployedPrNumber,
-        });
         await Promise.all([
           setCommitStatus(context, deployedPr.data, "pending"),
-          context.github.issues.createComment(issueComment),
+          createComment(context, deployedPrNumber, body),
         ]);
       } else {
         debug(
@@ -183,7 +185,7 @@ const probot = (app: Application) => {
       case commandMatches(context, "skip-qa"): {
         await Promise.all([
           setCommitStatus(context.issue(), pr.data, "success"),
-          createComment(context, ["Skipping QA 🤠"]),
+          createComment(context, pr.data.number, ["Skipping QA 🤠"]),
         ]);
         break;
       }

@@ -24988,31 +24988,6 @@ const handleDeploy = async (context, version, environment, payload, commands) =>
         throw e;
     }
 };
-// If the PR was deployed to pre-production, then deploy it to production
-const handlePrMerged = async (context, pr) => {
-    const { productionEnvironment, preProductionEnvironment } = config_1.config;
-    const deployment = await utils_1.findDeployment(context, preProductionEnvironment);
-    if (!deployment) {
-        logging_1.debug(`No deployment found for ${preProductionEnvironment} - quitting`);
-        return;
-    }
-    const deployedPrNumber = utils_1.deploymentPullRequestNumber(deployment);
-    if (deployedPrNumber !== pr.number) {
-        logging_1.debug(`${pr.number} was merged, but is not currently deployed to ${preProductionEnvironment} - quitting`);
-        return;
-    }
-    if (deployment.sha !== pr.head.sha) {
-        logging_1.debug(`!!!!!!!!!!! OUTDATED`, deployment.sha, pr.head.sha);
-        const message = [
-            `⚠️ The deployment to ${preProductionEnvironment} was outdated, so I skipped deployment to ${productionEnvironment}.`,
-            comment.mention(`, please check ${comment.code(pr.base.ref)} and deploy manually if necessary.`),
-        ];
-        await utils_1.createComment(context, pr.number, message);
-        return;
-    }
-    logging_1.debug(`${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`);
-    return deployPr(context, pr, productionEnvironment);
-};
 const deployPr = async (context, pr, environment) => {
     try {
         const { ref } = pr.head;
@@ -25090,43 +25065,9 @@ const invalidateDeployedPullRequest = async (context) => {
         logging_1.debug("No pull request currently deployed to ${environment} - nothing to do");
     }
 };
-const updateOutdatedDeployment = async (context) => {
-    const contextBranch = context.payload.ref.replace("refs/heads/", "");
-    const { preProductionEnvironment } = config_1.config;
-    const deployment = await utils_1.findDeployment(context, preProductionEnvironment);
-    let deployedPr;
-    if (!deployment) {
-        logging_1.debug(`No deployment found for ${preProductionEnvironment} - quitting`);
-        return;
-    }
-    try {
-        const deployedPrNumber = utils_1.deploymentPullRequestNumber(deployment);
-        deployedPr = (await context.github.pulls.get(context.repo({ pull_number: deployedPrNumber }))).data;
-    }
-    catch (ex) {
-        // move on
-    }
-    if (!deployedPr) {
-        logging_1.debug(`Could not find PR associated with ${preProductionEnvironment} deployment - quitting`);
-        return;
-    }
-    const prBranch = deployedPr.head.ref;
-    if (prBranch !== contextBranch) {
-        logging_1.debug(`Push is unrelated to ${preProductionEnvironment} deployment - nothing to do (${prBranch} vs ${contextBranch})`);
-        return;
-    }
-    logging_1.debug(`Re-deploying ${deployedPr.number} to ${preProductionEnvironment} with new commits...`);
-    return Promise.all([
-        utils_1.setCommitStatus(context, deployedPr, "pending"),
-        handleQA(context, deployedPr),
-    ]);
-};
 const probot = (app) => {
     // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
     // https://help.github.com/en/actions/reference/events-that-trigger-workflows
-    app.on(["push"], async (context) => {
-        await updateOutdatedDeployment(context);
-    });
     app.on(["pull_request.opened", "pull_request.reopened"], async (context) => {
         const pr = await context.github.pulls.get(context.issue());
         await utils_1.setCommitStatus(context, pr.data, "pending");
@@ -25140,16 +25081,13 @@ const probot = (app) => {
         switch (true) {
             case utils_1.commandMatches(context, "skip-qa"): {
                 await Promise.all([
-                    utils_1.setCommitStatus(context, pr.data, "success"),
+                    utils_1.setCommitStatus(context.issue(), pr.data, "success"),
                     utils_1.createComment(context, pr.data.number, ["Skipping QA 🤠"]),
                 ]);
                 break;
             }
             case utils_1.commandMatches(context, "qa"): {
-                await Promise.all([
-                    utils_1.setCommitStatus(context, pr.data, "pending"),
-                    handleQA(context, pr.data),
-                ]);
+                await handleQA(context, pr.data);
                 break;
             }
             default: {
@@ -25158,15 +25096,11 @@ const probot = (app) => {
         }
     });
     app.on("pull_request.closed", async (context) => {
-        const pr = await context.github.pulls.get(context.issue());
         // "If the action is closed and the merged key is true, the pull request was merged"
         // https://developer.github.com/v3/activity/events/types/#pullrequestevent
         if (context.payload.action === "closed" &&
             context.payload.pull_request.merged) {
-            await Promise.all([
-                invalidateDeployedPullRequest(context),
-                handlePrMerged(context, pr.data),
-            ]);
+            await invalidateDeployedPullRequest(context);
         }
     });
 };
