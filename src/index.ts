@@ -47,7 +47,7 @@ const handleDeploy = async (
   }
 };
 
-const releaseAndDeploy = async (
+const releaseDeployAndVerify = async (
   context: Context,
   version: string,
   environment: string,
@@ -59,9 +59,16 @@ const releaseAndDeploy = async (
     environment,
     { pr: context.issue().number },
     [
+      "echo ::group::Release",
       `export RELEASE_BRANCH=${ref}`,
       config.releaseCommand,
+      "echo ::endgroup::",
+      "echo ::group::Deploy",
       config.deployCommand,
+      "echo ::endgroup::",
+      "echo ::group::Verify",
+      config.verifyCommand || "echo No verify command provided",
+      "echo ::endgroup::",
     ]
   );
   const body = [
@@ -71,33 +78,6 @@ const releaseAndDeploy = async (
     comment.details("Output", comment.codeBlock(output)),
   ];
   await createComment(context, body);
-};
-
-const verifyDeployment = async (
-  context: Context,
-  version: string,
-  environment: string
-) => {
-  if (config.verifyCommand) {
-    const output = await handleDeploy(
-      context,
-      version,
-      environment,
-      { pr: context.issue().number },
-      [config.verifyCommand]
-    );
-    const body = [
-      comment.mention(
-        `verified deployment of ${version} in ${environment} (${comment.runLink(
-          "Details"
-        )})`
-      ),
-      comment.details("Output", comment.codeBlock(output)),
-    ];
-    await createComment(context, body);
-  } else {
-    debug(`No verify command provided - not verifying deployment`);
-  }
 };
 
 const handleQA = async (context: Context, pr: PullRequest) => {
@@ -119,16 +99,7 @@ const handleQA = async (context: Context, pr: PullRequest) => {
         }
         const { ref } = pr.head;
         const version = await getShortCommit();
-        await releaseAndDeploy(context, version, environment, ref);
-        try {
-          await verifyDeployment(context, version, environment);
-        } catch (e) {
-          await handleError(
-            context,
-            `verifying deployment in ${environment} failed`,
-            e
-          );
-        }
+        await releaseDeployAndVerify(context, version, environment, ref);
       } catch (e) {
         await handleError(
           context,
