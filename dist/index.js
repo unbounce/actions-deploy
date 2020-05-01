@@ -25065,9 +25065,43 @@ const invalidateDeployedPullRequest = async (context) => {
         logging_1.debug("No pull request currently deployed to ${environment} - nothing to do");
     }
 };
+const updateOutdatedDeployment = async (context) => {
+    const contextBranch = context.payload.ref.replace("refs/heads/", "");
+    const { preProductionEnvironment } = config_1.config;
+    const deployment = await utils_1.findDeployment(context, preProductionEnvironment);
+    let deployedPr;
+    if (!deployment) {
+        logging_1.debug(`No deployment found for ${preProductionEnvironment} - quitting`);
+        return;
+    }
+    try {
+        const deployedPrNumber = utils_1.deploymentPullRequestNumber(deployment);
+        deployedPr = (await context.github.pulls.get(context.repo({ pull_number: deployedPrNumber }))).data;
+    }
+    catch (ex) {
+        // move on
+    }
+    if (!deployedPr) {
+        logging_1.debug(`Could not find PR associated with ${preProductionEnvironment} deployment - quitting`);
+        return;
+    }
+    const prBranch = deployedPr.head.ref;
+    if (prBranch !== contextBranch) {
+        logging_1.debug(`Push is unrelated to ${preProductionEnvironment} deployment - nothing to do (${prBranch} vs ${contextBranch})`);
+        return;
+    }
+    logging_1.debug(`Re-deploying ${deployedPr.number} to ${preProductionEnvironment} with new commits...`);
+    return Promise.all([
+        utils_1.setCommitStatus(context, deployedPr, "pending"),
+        handleQA(context, deployedPr),
+    ]);
+};
 const probot = (app) => {
     // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
     // https://help.github.com/en/actions/reference/events-that-trigger-workflows
+    app.on(["push"], async (context) => {
+        await updateOutdatedDeployment(context);
+    });
     app.on(["pull_request.opened", "pull_request.reopened"], async (context) => {
         const pr = await context.github.pulls.get(context.issue());
         await utils_1.setCommitStatus(context, pr.data, "pending");

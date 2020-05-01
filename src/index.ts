@@ -164,9 +164,64 @@ const invalidateDeployedPullRequest = async (
   }
 };
 
+const updateOutdatedDeployment = async (
+  context: Context<Webhooks.WebhookPayloadPush>
+) => {
+  const contextBranch = context.payload.ref.replace("refs/heads/", "");
+  const { preProductionEnvironment } = config;
+  const deployment = await findDeployment(context, preProductionEnvironment);
+  let deployedPr;
+
+  if (!deployment) {
+    debug(`No deployment found for ${preProductionEnvironment} - quitting`);
+    return;
+  }
+
+  try {
+    const deployedPrNumber = deploymentPullRequestNumber(deployment);
+
+    deployedPr = (
+      await context.github.pulls.get(
+        context.repo({ pull_number: deployedPrNumber })
+      )
+    ).data;
+  } catch (ex) {
+    // move on
+  }
+
+  if (!deployedPr) {
+    debug(
+      `Could not find PR associated with ${preProductionEnvironment} deployment - quitting`
+    );
+    return;
+  }
+
+  const prBranch = deployedPr.head.ref;
+
+  if (prBranch !== contextBranch) {
+    debug(
+      `Push is unrelated to ${preProductionEnvironment} deployment - nothing to do (${prBranch} vs ${contextBranch})`
+    );
+    return;
+  }
+
+  debug(
+    `Re-deploying ${deployedPr.number} to ${preProductionEnvironment} with new commits...`
+  );
+
+  return Promise.all([
+    setCommitStatus(context, deployedPr, "pending"),
+    handleQA(context, deployedPr),
+  ]);
+};
+
 const probot = (app: Application) => {
   // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
   // https://help.github.com/en/actions/reference/events-that-trigger-workflows
+
+  app.on(["push"], async (context) => {
+    await updateOutdatedDeployment(context);
+  });
 
   app.on(["pull_request.opened", "pull_request.reopened"], async (context) => {
     const pr = await context.github.pulls.get(context.issue());
