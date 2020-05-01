@@ -184,7 +184,7 @@ const probot = (app: Application) => {
     switch (true) {
       case commandMatches(context, "skip-qa"): {
         await Promise.all([
-          setCommitStatus(context.issue(), pr.data, "success"),
+          setCommitStatus(context, pr.data, "success"),
           createComment(context, pr.data.number, ["Skipping QA 🤠"]),
         ]);
         break;
