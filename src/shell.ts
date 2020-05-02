@@ -18,11 +18,7 @@ export const shell = async (
     };
     const options = { env, cwd: process.cwd() };
     // TODO shell escape command
-    const child = spawn(
-      "bash",
-      ["-e", "-x", "-c", commands.join("\n")],
-      options
-    );
+    const child = spawn("bash", ["-e", "-c", commands.join("\n")], options);
     child.stdout.on("data", (data) => {
       const str = data.toString();
       output.push(str);

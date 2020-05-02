@@ -26365,12 +26365,15 @@ const releaseDeployAndVerify = async (context, version, environment, ref) => {
     const output = await handleDeploy(context, version, environment, { pr: context.issue().number }, [
         "echo ::group::Release",
         `export RELEASE_BRANCH=${ref}`,
+        `echo ${config_1.config.releaseCommand}`,
         config_1.config.releaseCommand,
         "echo ::endgroup::",
         "echo ::group::Deploy",
+        `echo ${config_1.config.deployCommand}`,
         config_1.config.deployCommand,
         "echo ::endgroup::",
         "echo ::group::Verify",
+        `echo ${config_1.config.verifyCommand}`,
         config_1.config.verifyCommand || "echo No verify command provided",
         "echo ::endgroup::",
     ]);
@@ -81567,7 +81570,7 @@ exports.shell = async (commands, extraEnv = {}) => {
         const env = Object.assign(Object.assign({}, process.env), extraEnv);
         const options = { env, cwd: process.cwd() };
         // TODO shell escape command
-        const child = child_process_1.spawn("bash", ["-e", "-x", "-c", commands.join("\n")], options);
+        const child = child_process_1.spawn("bash", ["-e", "-c", commands.join("\n")], options);
         child.stdout.on("data", (data) => {
             const str = data.toString();
             output.push(str);

@@ -61,12 +61,15 @@ const releaseDeployAndVerify = async (
     [
       "echo ::group::Release",
       `export RELEASE_BRANCH=${ref}`,
+      `echo ${config.releaseCommand}`,
       config.releaseCommand,
       "echo ::endgroup::",
       "echo ::group::Deploy",
+      `echo ${config.deployCommand}`,
       config.deployCommand,
       "echo ::endgroup::",
       "echo ::group::Verify",
+      `echo ${config.verifyCommand}`,
       config.verifyCommand || "echo No verify command provided",
       "echo ::endgroup::",
     ]
