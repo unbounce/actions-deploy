@@ -110,7 +110,7 @@ const handleQA = async (context: Context, pr: PullRequest) => {
             `release and deploy to ${environment} failed`,
             e
           ),
-          setCommitStatus(context, pr, "failed"),
+          setCommitStatus(context, pr, "failure"),
         ]);
       }
     } else {

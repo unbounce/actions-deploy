@@ -1,11 +1,15 @@
-import type { Octokit } from "@octokit/rest";
-import { Context } from "probot";
+import type { Context } from "probot";
 
 import { config } from "./config";
 import * as comment from "./comment";
 import { ShellError } from "./shell";
 import { error } from "./logging";
-import { Deployment, PullRequest, DeploymentStatusState } from "./types";
+import {
+  Deployment,
+  PullRequest,
+  DeploymentStatusState,
+  CommitStatusState,
+} from "./types";
 
 // From https://github.com/probot/commands/blob/master/index.js
 export const commandMatches = (context: Context, match: string): boolean => {
@@ -23,7 +27,7 @@ export const createComment = (context: Context, body: string[]) => {
 export const setCommitStatus = async (
   context: Context,
   pr: PullRequest,
-  state: Octokit["ReposCreateStatusParams"]["state"]
+  state: CommitStatusState
 ) => {
   const { sha } = pr.head;
   if (pr) {
