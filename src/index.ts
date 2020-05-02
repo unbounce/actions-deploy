@@ -104,12 +104,14 @@ const handleQA = async (context: Context, pr: PullRequest) => {
         const version = await getShortCommit();
         await releaseDeployAndVerify(context, version, environment, ref);
       } catch (e) {
-        setCommitStatus(context, pr, "failed"),
-          await handleError(
+        await Promise.all([
+          handleError(
             context,
             `release and deploy to ${environment} failed`,
             e
-          );
+          ),
+          setCommitStatus(context, pr, "failed"),
+        ]);
       }
     } else {
       const prNumber = deploymentPullRequestNumber(deployment);

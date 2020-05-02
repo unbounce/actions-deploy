@@ -26402,8 +26402,10 @@ const handleQA = async (context, pr) => {
                 await releaseDeployAndVerify(context, version, environment, ref);
             }
             catch (e) {
-                utils_1.setCommitStatus(context, pr, "failed"),
-                    await utils_1.handleError(context, `release and deploy to ${environment} failed`, e);
+                await Promise.all([
+                    utils_1.handleError(context, `release and deploy to ${environment} failed`, e),
+                    utils_1.setCommitStatus(context, pr, "failed"),
+                ]);
             }
         }
         else {
