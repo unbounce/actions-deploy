@@ -233,6 +233,7 @@ const updateOutdatedDeployment = async (
 ) => {
   const { preProductionEnvironment } = config;
   const deployment = await findDeployment(context, preProductionEnvironment);
+  let deployedPrNumber;
   let deployedPr;
 
   if (!deployment) {
@@ -241,15 +242,15 @@ const updateOutdatedDeployment = async (
   }
 
   try {
-    const deployedPrNumber = deploymentPullRequestNumber(deployment);
+    deployedPrNumber = deploymentPullRequestNumber(deployment);
 
-    deployedPr = (
-      await context.github.pulls.get(
-        context.repo({ pull_number: deployedPrNumber })
-      )
-    ).data;
+    const prResponse = await context.github.pulls.get(
+      context.repo({ pull_number: deployedPrNumber })
+    );
+
+    deployedPr = prResponse.data;
   } catch (ex) {
-    // move on
+    debug(`Failed to fetch PR data for #${deployedPrNumber}`);
   }
 
   if (!deployedPr) {

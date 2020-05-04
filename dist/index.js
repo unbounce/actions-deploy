@@ -25100,17 +25100,19 @@ const invalidateDeployedPullRequest = async (context) => {
 const updateOutdatedDeployment = async (context, pr) => {
     const { preProductionEnvironment } = config_1.config;
     const deployment = await utils_1.findDeployment(context, preProductionEnvironment);
+    let deployedPrNumber;
     let deployedPr;
     if (!deployment) {
         logging_1.debug(`No deployment found for ${preProductionEnvironment} - quitting`);
         return;
     }
     try {
-        const deployedPrNumber = utils_1.deploymentPullRequestNumber(deployment);
-        deployedPr = (await context.github.pulls.get(context.repo({ pull_number: deployedPrNumber }))).data;
+        deployedPrNumber = utils_1.deploymentPullRequestNumber(deployment);
+        const prResponse = await context.github.pulls.get(context.repo({ pull_number: deployedPrNumber }));
+        deployedPr = prResponse.data;
     }
     catch (ex) {
-        // move on
+        logging_1.debug(`Failed to fetch PR data for #${deployedPrNumber}`);
     }
     if (!deployedPr) {
         logging_1.debug(`Could not find PR associated with ${preProductionEnvironment} deployment - quitting`);
