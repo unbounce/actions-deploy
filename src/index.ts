@@ -75,7 +75,7 @@ const releaseDeployAndVerify = async (
     comment.mention(
       `deployed ${version} to ${environment} (${comment.runLink("Details")})`
     ),
-    comment.details("Output", comment.logToDetails(output)),
+    comment.logToDetails(output),
   ];
   await createComment(context, body);
 };
