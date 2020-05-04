@@ -110,7 +110,7 @@ const handlePrMerged = async (
     await handleError(
       context,
       pr.number,
-      `release and deploy to ${productionEnvironment} failed`,
+      `deploy to ${productionEnvironment} failed`,
       e
     );
   }
@@ -186,7 +186,7 @@ const invalidateDeployedPullRequest = async (
   if (typeof deployedPrNumber === "number") {
     if (deployedPrNumber === prNumber) {
       debug(
-        "This pull request is currently deployed to ${environment} - nothing to do"
+        `This pull request is currently deployed to ${environment} - nothing to do`
       );
     } else {
       const deployedPr = await context.github.pulls.get(
@@ -222,7 +222,7 @@ const invalidateDeployedPullRequest = async (
     }
   } else {
     debug(
-      "No pull request currently deployed to ${environment} - nothing to do"
+      `No pull request currently deployed to ${environment} - nothing to do`
     );
   }
 };

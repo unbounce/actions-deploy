@@ -25020,7 +25020,7 @@ const handlePrMerged = async (context, pr) => {
         await utils_1.createComment(context, pr.number, body);
     }
     catch (e) {
-        await utils_1.handleError(context, pr.number, `release and deploy to ${productionEnvironment} failed`, e);
+        await utils_1.handleError(context, pr.number, `deploy to ${productionEnvironment} failed`, e);
     }
 };
 const handleQA = async (context, pr) => {
@@ -25071,7 +25071,7 @@ const invalidateDeployedPullRequest = async (context) => {
     const deployedPrNumber = utils_1.deploymentPullRequestNumber(deployment);
     if (typeof deployedPrNumber === "number") {
         if (deployedPrNumber === prNumber) {
-            logging_1.debug("This pull request is currently deployed to ${environment} - nothing to do");
+            logging_1.debug(`This pull request is currently deployed to ${environment} - nothing to do`);
         }
         else {
             const deployedPr = await context.github.pulls.get(context.repo({ pull_number: deployedPrNumber }));
@@ -25094,7 +25094,7 @@ const invalidateDeployedPullRequest = async (context) => {
         }
     }
     else {
-        logging_1.debug("No pull request currently deployed to ${environment} - nothing to do");
+        logging_1.debug(`No pull request currently deployed to ${environment} - nothing to do`);
     }
 };
 const updateOutdatedDeployment = async (context, pr) => {
