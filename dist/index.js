@@ -96576,7 +96576,7 @@ exports.checkoutPullRequest = (pr) => {
     const { sha, ref } = pr.head;
     return shell_1.shell([
         `git fetch origin ${sha}:refs/remotes/origin/${ref}`,
-        `git checkout -b ${ref}`,
+        `git checkout ${ref}`,
     ]);
 };
 exports.updatePullRequest = async (pr) => {

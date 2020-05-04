@@ -5,7 +5,7 @@ export const checkoutPullRequest = (pr: PullRequest) => {
   const { sha, ref } = pr.head;
   return shell([
     `git fetch origin ${sha}:refs/remotes/origin/${ref}`,
-    `git checkout -b ${ref}`,
+    `git checkout ${ref}`,
   ]);
 };
 
