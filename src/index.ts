@@ -198,7 +198,7 @@ const probot = (app: Application) => {
     switch (true) {
       case commandMatches(context, "skip-qa"): {
         await Promise.all([
-          setCommitStatus(context.issue(), pr.data, "success"),
+          setCommitStatus(context, pr.data, "success"),
           createComment(context, ["Skipping QA 🤠"]),
         ]);
         break;
@@ -210,12 +210,12 @@ const probot = (app: Application) => {
       }
 
       case commandMatches(context, "failed-qa"): {
-        await setCommitStatus(context.issue(), pr.data, "failure");
+        await setCommitStatus(context, pr.data, "failure");
         break;
       }
 
       case commandMatches(context, "passed-qa"): {
-        await setCommitStatus(context.issue(), pr.data, "success");
+        await setCommitStatus(context, pr.data, "success");
         break;
       }
 
