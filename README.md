@@ -9,8 +9,9 @@ Create a workflow in your repository (such as `.github/workflows/deployment.yaml
 ```yaml
 on:
   pull_request:
-    types: [opened, reopened, closed]
-  push: {}
+    types: [opened, reopened, closed, synchronize]
+  push:
+    branches: [master]
   issue_comment: {}
 
 name: Deployment
@@ -24,7 +25,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     # Should be inverse of `if` below
-    if: "!((github.event_name == 'push') || (startsWith(github.event_name, 'issue_comment') && contains(github.event.comment.body, '/qa')))"
+    if: "!((github.event_name == 'push' && github.ref == 'master') || (startsWith(github.event_name, 'issue_comment') && contains(github.event.comment.body, '/qa')))"
     steps:
     # These tasks do not actually need a copy of the repository because it only performs automation tasks with the GitHub API
     # - uses: actions/checkout@master
@@ -42,7 +43,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     # Should be inverse of `if` above
-    if: "(github.event_name == 'push') || (startsWith(github.event_name, 'issue_comment') && contains(github.event.comment.body, '/qa'))"
+    if: "(github.event_name == 'push' && github.ref == 'master') || (startsWith(github.event_name, 'issue_comment') && contains(github.event.comment.body, '/qa'))"
     steps:
     - uses: actions/checkout@master
     - uses: unbounce/actions-deploy@master

@@ -25010,9 +25010,9 @@ const handlePrMerged = async (context, pr) => {
         return;
     }
     logging_1.debug(`${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`);
-    return deployPr(context, pr, productionEnvironment);
+    return releaseAndDeployPr(context, pr, productionEnvironment);
 };
-const deployPr = async (context, pr, environment) => {
+const releaseAndDeployPr = async (context, pr, environment) => {
     try {
         const { ref } = pr.head;
         await git_1.checkoutPullRequest(pr);
@@ -25043,7 +25043,7 @@ const handleQA = async (context, pr) => {
     const environment = config_1.config.preProductionEnvironment;
     const deployment = await utils_1.findDeployment(context, environment);
     if (utils_1.environmentIsAvailable(context, deployment)) {
-        await deployPr(context, pr, environment);
+        await releaseAndDeployPr(context, pr, environment);
     }
     else {
         const prNumber = utils_1.deploymentPullRequestNumber(deployment);
@@ -25089,8 +25089,7 @@ const invalidateDeployedPullRequest = async (context) => {
         logging_1.debug("No pull request currently deployed to ${environment} - nothing to do");
     }
 };
-const updateOutdatedDeployment = async (context) => {
-    const contextBranch = context.payload.ref.replace("refs/heads/", "");
+const updateOutdatedDeployment = async (context, pr) => {
     const { preProductionEnvironment } = config_1.config;
     const deployment = await utils_1.findDeployment(context, preProductionEnvironment);
     let deployedPr;
@@ -25109,9 +25108,8 @@ const updateOutdatedDeployment = async (context) => {
         logging_1.debug(`Could not find PR associated with ${preProductionEnvironment} deployment - quitting`);
         return;
     }
-    const prBranch = deployedPr.head.ref;
-    if (prBranch !== contextBranch) {
-        logging_1.debug(`Push is unrelated to ${preProductionEnvironment} deployment - nothing to do (${prBranch} vs ${contextBranch})`);
+    if (deployedPr.number !== pr.number) {
+        logging_1.debug(`PR synchronize event is unrelated to ${preProductionEnvironment} deployment - nothing to do (${pr.number} synchronized vs ${deployedPr.number} deployed)`);
         return;
     }
     logging_1.debug(`Re-deploying ${deployedPr.number} to ${preProductionEnvironment} with new commits...`);
@@ -25123,8 +25121,9 @@ const updateOutdatedDeployment = async (context) => {
 const probot = (app) => {
     // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
     // https://help.github.com/en/actions/reference/events-that-trigger-workflows
-    app.on(["push"], async (context) => {
-        await updateOutdatedDeployment(context);
+    app.on("pull_request.synchronize", async (context) => {
+        const pr = await context.github.pulls.get(context.issue());
+        await updateOutdatedDeployment(context, pr.data);
     });
     app.on(["pull_request.opened", "pull_request.reopened"], async (context) => {
         const pr = await context.github.pulls.get(context.issue());

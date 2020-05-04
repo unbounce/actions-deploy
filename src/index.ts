@@ -87,10 +87,10 @@ const handlePrMerged = async (
     `${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`
   );
 
-  return deployPr(context, pr, productionEnvironment);
+  return releaseAndDeployPr(context, pr, productionEnvironment);
 };
 
-const deployPr = async (
+const releaseAndDeployPr = async (
   context: Context,
   pr: PullRequest,
   environment: string
@@ -143,7 +143,7 @@ const handleQA = async (context: Context, pr: PullRequest) => {
   const deployment = await findDeployment(context, environment);
 
   if (environmentIsAvailable(context, deployment)) {
-    await deployPr(context, pr, environment);
+    await releaseAndDeployPr(context, pr, environment);
   } else {
     const prNumber = deploymentPullRequestNumber(deployment);
     const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
@@ -208,9 +208,9 @@ const invalidateDeployedPullRequest = async (
 };
 
 const updateOutdatedDeployment = async (
-  context: Context<Webhooks.WebhookPayloadPush>
+  context: Context<Webhooks.WebhookPayloadPullRequest>,
+  pr: PullRequest
 ) => {
-  const contextBranch = context.payload.ref.replace("refs/heads/", "");
   const { preProductionEnvironment } = config;
   const deployment = await findDeployment(context, preProductionEnvironment);
   let deployedPr;
@@ -239,11 +239,9 @@ const updateOutdatedDeployment = async (
     return;
   }
 
-  const prBranch = deployedPr.head.ref;
-
-  if (prBranch !== contextBranch) {
+  if (deployedPr.number !== pr.number) {
     debug(
-      `Push is unrelated to ${preProductionEnvironment} deployment - nothing to do (${prBranch} vs ${contextBranch})`
+      `PR synchronize event is unrelated to ${preProductionEnvironment} deployment - nothing to do (${pr.number} synchronized vs ${deployedPr.number} deployed)`
     );
     return;
   }
@@ -262,8 +260,9 @@ const probot = (app: Application) => {
   // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
   // https://help.github.com/en/actions/reference/events-that-trigger-workflows
 
-  app.on("push", async (context) => {
-    await updateOutdatedDeployment(context);
+  app.on("pull_request.synchronize", async (context) => {
+    const pr = await context.github.pulls.get(context.issue());
+    await updateOutdatedDeployment(context, pr.data);
   });
 
   app.on(["pull_request.opened", "pull_request.reopened"], async (context) => {
