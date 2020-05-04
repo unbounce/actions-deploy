@@ -61,15 +61,12 @@ const releaseDeployAndVerify = async (
     [
       "echo ::group::Release",
       `export RELEASE_BRANCH=${ref}`,
-      `echo ${config.releaseCommand}`,
       config.releaseCommand,
       "echo ::endgroup::",
       "echo ::group::Deploy",
-      `echo ${config.deployCommand}`,
       config.deployCommand,
       "echo ::endgroup::",
       "echo ::group::Verify",
-      `echo ${config.verifyCommand}`,
       config.verifyCommand || "echo No verify command provided",
       "echo ::endgroup::",
     ]
@@ -78,7 +75,7 @@ const releaseDeployAndVerify = async (
     comment.mention(
       `deployed ${version} to ${environment} (${comment.runLink("Details")})`
     ),
-    comment.details("Output", comment.codeBlock(output)),
+    comment.details("Output", comment.logToDetails(output)),
   ];
   await createComment(context, body);
 };

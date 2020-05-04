@@ -26365,21 +26365,18 @@ const releaseDeployAndVerify = async (context, version, environment, ref) => {
     const output = await handleDeploy(context, version, environment, { pr: context.issue().number }, [
         "echo ::group::Release",
         `export RELEASE_BRANCH=${ref}`,
-        `echo ${config_1.config.releaseCommand}`,
         config_1.config.releaseCommand,
         "echo ::endgroup::",
         "echo ::group::Deploy",
-        `echo ${config_1.config.deployCommand}`,
         config_1.config.deployCommand,
         "echo ::endgroup::",
         "echo ::group::Verify",
-        `echo ${config_1.config.verifyCommand}`,
         config_1.config.verifyCommand || "echo No verify command provided",
         "echo ::endgroup::",
     ]);
     const body = [
         comment.mention(`deployed ${version} to ${environment} (${comment.runLink("Details")})`),
-        comment.details("Output", comment.codeBlock(output)),
+        comment.details("Output", comment.logToDetails(output)),
     ];
     await utils_1.createComment(context, body);
 };
@@ -81571,8 +81568,15 @@ exports.shell = async (commands, extraEnv = {}) => {
     return new Promise((resolve, reject) => {
         const env = Object.assign(Object.assign({}, process.env), extraEnv);
         const options = { env, cwd: process.cwd() };
+        const commandsWithTracing = commands.reduce((acc, command) => {
+            if (!command.startsWith("echo")) {
+                acc.push(`echo ${command}`);
+            }
+            acc.push(command);
+            return acc;
+        }, []);
         // TODO shell escape command
-        const child = child_process_1.spawn("bash", ["-e", "-c", commands.join("\n")], options);
+        const child = child_process_1.spawn("bash", ["-e", "-c", commandsWithTracing.join("\n")], options);
         child.stdout.on("data", (data) => {
             const str = data.toString();
             output.push(str);

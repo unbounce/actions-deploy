@@ -17,8 +17,19 @@ export const shell = async (
       ...extraEnv,
     };
     const options = { env, cwd: process.cwd() };
+    const commandsWithTracing = commands.reduce((acc, command) => {
+      if (!command.startsWith("echo")) {
+        acc.push(`echo ${command}`);
+      }
+      acc.push(command);
+      return acc;
+    }, [] as string[]);
     // TODO shell escape command
-    const child = spawn("bash", ["-e", "-c", commands.join("\n")], options);
+    const child = spawn(
+      "bash",
+      ["-e", "-c", commandsWithTracing.join("\n")],
+      options
+    );
     child.stdout.on("data", (data) => {
       const str = data.toString();
       output.push(str);
