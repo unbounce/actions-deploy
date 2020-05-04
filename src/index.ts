@@ -262,7 +262,7 @@ const probot = (app: Application) => {
   // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
   // https://help.github.com/en/actions/reference/events-that-trigger-workflows
 
-  app.on(["push"], async (context) => {
+  app.on("push", async (context) => {
     await updateOutdatedDeployment(context);
   });
 
