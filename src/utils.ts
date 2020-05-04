@@ -68,6 +68,34 @@ export const findDeployment = async (context: Context, environment: string) => {
   }
 };
 
+export const findLastDeploymentForPullRequest = async (
+  context: Context,
+  prNumber: number
+) => {
+  const commits = await context.github.pulls.listCommits(
+    context.repo({ pull_number: prNumber })
+  );
+  for (let i = commits.data.length - 1; i >= 0; i--) {
+    const { sha } = commits.data[i];
+    const deployments = await context.github.repos.listDeployments(
+      context.repo({ sha })
+    );
+    if (deployments.data.length > 0) {
+      return deployments.data[0];
+    }
+  }
+  return undefined;
+};
+
+export const pullRequestHasBeenDeployed = async (
+  context: Context,
+  prNumber: number
+) => {
+  return (
+    (await findLastDeploymentForPullRequest(context, prNumber)) !== undefined
+  );
+};
+
 export const setDeploymentStatus = (
   context: Context,
   deploymentId: number,

@@ -26454,6 +26454,11 @@ const invalidateDeployedPullRequest = async (context) => {
         logging_1.debug("No pull request currently deployed to ${environment} - nothing to do");
     }
 };
+const commentPullRequestNotDeployed = (context) => {
+    return utils_1.createComment(context, [
+        `This pull request has not been deployed yet. You can use ${comment.code("/qa")} to deploy it to ${config_1.config.preProductionEnvironment} or ${comment.code("/skip-qa")} to not deploy this pull request.`,
+    ]);
+};
 const probot = (app) => {
     // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
     // https://help.github.com/en/actions/reference/events-that-trigger-workflows
@@ -26480,11 +26485,21 @@ const probot = (app) => {
                 break;
             }
             case utils_1.commandMatches(context, "failed-qa"): {
-                await utils_1.setCommitStatus(context, pr.data, "failure");
+                if (utils_1.pullRequestHasBeenDeployed(context, pr.data.number)) {
+                    await utils_1.setCommitStatus(context, pr.data, "failure");
+                }
+                else {
+                    await commentPullRequestNotDeployed(context);
+                }
                 break;
             }
             case utils_1.commandMatches(context, "passed-qa"): {
-                await utils_1.setCommitStatus(context, pr.data, "success");
+                if (utils_1.pullRequestHasBeenDeployed(context, pr.data.number)) {
+                    await utils_1.setCommitStatus(context, pr.data, "success");
+                }
+                else {
+                    await commentPullRequestNotDeployed(context);
+                }
                 break;
             }
             default: {
@@ -37266,6 +37281,20 @@ exports.findDeployment = async (context, environment) => {
     else {
         return undefined;
     }
+};
+exports.findLastDeploymentForPullRequest = async (context, prNumber) => {
+    const commits = await context.github.pulls.listCommits(context.repo({ pull_number: prNumber }));
+    for (let i = commits.data.length - 1; i >= 0; i--) {
+        const { sha } = commits.data[i];
+        const deployments = await context.github.repos.listDeployments(context.repo({ sha }));
+        if (deployments.data.length > 0) {
+            return deployments.data[0];
+        }
+    }
+    return undefined;
+};
+exports.pullRequestHasBeenDeployed = async (context, prNumber) => {
+    return ((await exports.findLastDeploymentForPullRequest(context, prNumber)) !== undefined);
 };
 exports.setDeploymentStatus = (context, deploymentId, state) => context.github.repos.createDeploymentStatus(context.repo({ deployment_id: deploymentId, state }));
 exports.createDeployment = (context, ref, environment, payload) => context.github.repos.createDeployment(context.repo({

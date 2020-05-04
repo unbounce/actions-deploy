@@ -13,6 +13,7 @@ import {
   environmentIsAvailable,
   deploymentPullRequestNumber,
   handleError,
+  pullRequestHasBeenDeployed,
 } from "./utils";
 import { debug, error } from "./logging";
 import { shell } from "./shell";
@@ -178,6 +179,16 @@ const invalidateDeployedPullRequest = async (
   }
 };
 
+const commentPullRequestNotDeployed = (context: Context) => {
+  return createComment(context, [
+    `This pull request has not been deployed yet. You can use ${comment.code(
+      "/qa"
+    )} to deploy it to ${config.preProductionEnvironment} or ${comment.code(
+      "/skip-qa"
+    )} to not deploy this pull request.`,
+  ]);
+};
+
 const probot = (app: Application) => {
   // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
   // https://help.github.com/en/actions/reference/events-that-trigger-workflows
@@ -210,12 +221,20 @@ const probot = (app: Application) => {
       }
 
       case commandMatches(context, "failed-qa"): {
-        await setCommitStatus(context, pr.data, "failure");
+        if (pullRequestHasBeenDeployed(context, pr.data.number)) {
+          await setCommitStatus(context, pr.data, "failure");
+        } else {
+          await commentPullRequestNotDeployed(context);
+        }
         break;
       }
 
       case commandMatches(context, "passed-qa"): {
-        await setCommitStatus(context, pr.data, "success");
+        if (pullRequestHasBeenDeployed(context, pr.data.number)) {
+          await setCommitStatus(context, pr.data, "success");
+        } else {
+          await commentPullRequestNotDeployed(context);
+        }
         break;
       }
 
