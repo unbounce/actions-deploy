@@ -96580,13 +96580,12 @@ exports.checkoutPullRequest = (pr) => {
     ]);
 };
 exports.updatePullRequest = async (pr) => {
-    const currentCommit = pr.head.sha;
     const currentBranch = pr.head.ref;
     const baseBranch = pr.base.ref;
+    await shell_1.shell([`git fetch --unshallow origin ${baseBranch} ${currentBranch}`]);
     try {
         return await shell_1.shell([
-            `git fetch --unshallow origin ${baseBranch} ${currentBranch}`,
-            `git pull --rebase origin ${baseBranch}`,
+            `git rebase origin/${baseBranch}`,
             `git push --force-with-lease origin ${currentBranch}`,
         ]);
     }
@@ -96594,8 +96593,8 @@ exports.updatePullRequest = async (pr) => {
         // If rebase wasn't clean, reset and try regular merge
         console.log("Rebase failed, trying merge instead");
         return shell_1.shell([
-            `git reset --hard ${currentCommit}`,
-            `git pull origin ${baseBranch}`,
+            `git rebase --abort`,
+            `git merge origin/${baseBranch}`,
             `git push origin ${currentBranch}`,
         ]);
     }

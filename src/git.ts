@@ -10,21 +10,20 @@ export const checkoutPullRequest = (pr: PullRequest) => {
 };
 
 export const updatePullRequest = async (pr: PullRequest) => {
-  const currentCommit = pr.head.sha;
   const currentBranch = pr.head.ref;
   const baseBranch = pr.base.ref;
+  await shell([`git fetch --unshallow origin ${baseBranch} ${currentBranch}`]);
   try {
     return await shell([
-      `git fetch --unshallow origin ${baseBranch} ${currentBranch}`,
-      `git pull --rebase origin ${baseBranch}`,
+      `git rebase origin/${baseBranch}`,
       `git push --force-with-lease origin ${currentBranch}`,
     ]);
   } catch (e) {
     // If rebase wasn't clean, reset and try regular merge
     console.log("Rebase failed, trying merge instead");
     return shell([
-      `git reset --hard ${currentCommit}`,
-      `git pull origin ${baseBranch}`,
+      `git rebase --abort`,
+      `git merge origin/${baseBranch}`,
       `git push origin ${currentBranch}`,
     ]);
   }
