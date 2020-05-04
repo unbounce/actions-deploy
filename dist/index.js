@@ -25010,40 +25010,48 @@ const handlePrMerged = async (context, pr) => {
         return;
     }
     logging_1.debug(`${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`);
-    return releaseAndDeployPr(context, pr, productionEnvironment);
-};
-const releaseAndDeployPr = async (context, pr, environment) => {
     try {
-        const { ref } = pr.head;
-        await git_1.checkoutPullRequest(pr);
-        try {
-            await git_1.updatePullRequest(pr);
-        }
-        catch (e) {
-            await utils_1.handleError(context, pr.number, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`, e);
-            return;
-        }
-        const version = await git_1.getShortCommit();
-        const output = await handleDeploy(context, version, environment, { pr: pr.number }, [
-            `export RELEASE_BRANCH=${ref}`,
-            config_1.config.releaseCommand,
-            config_1.config.deployCommand,
-        ]);
+        const version = await git_1.getShortSha(deployment.sha);
+        const output = await handleDeploy(context, version, productionEnvironment, { pr: pr.number }, [config_1.config.deployCommand]);
         const body = [
-            comment.mention(`deployed ${version} to ${environment} (${comment.runLink("Details")})`),
+            comment.mention(`deployed ${version} to ${productionEnvironment} (${comment.runLink("Details")})`),
             comment.details("Output", comment.codeBlock(output)),
         ];
         await utils_1.createComment(context, pr.number, body);
     }
     catch (e) {
-        await utils_1.handleError(context, pr.number, `release and deploy to ${environment} failed`, e);
+        await utils_1.handleError(context, pr.number, `release and deploy to ${productionEnvironment} failed`, e);
     }
 };
 const handleQA = async (context, pr) => {
     const environment = config_1.config.preProductionEnvironment;
     const deployment = await utils_1.findDeployment(context, environment);
     if (utils_1.environmentIsAvailable(context, deployment)) {
-        await releaseAndDeployPr(context, pr, environment);
+        try {
+            const { ref } = pr.head;
+            await git_1.checkoutPullRequest(pr);
+            try {
+                await git_1.updatePullRequest(pr);
+            }
+            catch (e) {
+                await utils_1.handleError(context, pr.number, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`, e);
+                return;
+            }
+            const version = await git_1.getShortSha("HEAD");
+            const output = await handleDeploy(context, version, environment, { pr: pr.number }, [
+                `export RELEASE_BRANCH=${ref}`,
+                config_1.config.releaseCommand,
+                config_1.config.deployCommand,
+            ]);
+            const body = [
+                comment.mention(`deployed ${version} to ${environment} (${comment.runLink("Details")})`),
+                comment.details("Output", comment.codeBlock(output)),
+            ];
+            await utils_1.createComment(context, pr.number, body);
+        }
+        catch (e) {
+            await utils_1.handleError(context, pr.number, `release and deploy to ${environment} failed`, e);
+        }
     }
     else {
         const prNumber = utils_1.deploymentPullRequestNumber(deployment);
@@ -95207,7 +95215,7 @@ exports.updatePullRequest = async (pr) => {
         ]);
     }
 };
-exports.getShortCommit = () => shell_1.shellOutput("git rev-parse --short HEAD").then((s) => s.toString().trim());
+exports.getShortSha = (revision) => shell_1.shellOutput(`git rev-parse --short ${revision}`).then((s) => s.toString().trim());
 
 
 /***/ }),
