@@ -209,6 +209,16 @@ const probot = (app: Application) => {
         break;
       }
 
+      case commandMatches(context, "failed-qa"): {
+        await setCommitStatus(context.issue(), pr.data, "failure");
+        break;
+      }
+
+      case commandMatches(context, "passed-qa"): {
+        await setCommitStatus(context.issue(), pr.data, "success");
+        break;
+      }
+
       default: {
         debug("Unknown command", context);
       }
