@@ -1737,8 +1737,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.details = (summary, body) => {
     return `<details>\n<summary>${summary}</summary>\n\n${body}\n</details>`;
 };
-exports.mention = (body) => {
-    return `@${process.env.GITHUB_ACTOR} ${body}`;
+exports.mention = (body0) => {
+    const body = body0.indexOf(",") === 0 ? body0 : ` ${body0}`;
+    return `@${process.env.GITHUB_ACTOR}${body}`;
 };
 exports.codeBlock = (body) => {
     const ticks = "```";
@@ -13716,7 +13717,81 @@ exports.zipMap = zipMap;
 
 /***/ }),
 /* 201 */,
-/* 202 */,
+/* 202 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+"use strict";
+
+
+// Original repository: https://github.com/defunctzombie/node-lsmod/
+//
+// [2018-02-09] @kamilogorek - Handle scoped packages structure
+
+// builtin
+var fs = __webpack_require__(747);
+var path = __webpack_require__(622);
+
+// node 0.6 support
+fs.existsSync = fs.existsSync || path.existsSync;
+
+// mainPaths are the paths where our mainprog will be able to load from
+// we store these to avoid grabbing the modules that were loaded as a result
+// of a dependency module loading its dependencies, we only care about deps our
+// mainprog loads
+var mainPaths = (require.main && require.main.paths) || [];
+
+module.exports = function() {
+  var paths = Object.keys(require.cache || []);
+
+  // module information
+  var infos = {};
+
+  // paths we have already inspected to avoid traversing again
+  var seen = {};
+
+  paths.forEach(function(p) {
+    /* eslint-disable consistent-return */
+
+    var dir = p;
+
+    (function updir() {
+      var orig = dir;
+      dir = path.dirname(orig);
+
+      if (/@[^/]+$/.test(dir)) {
+        dir = path.dirname(dir);
+      }
+
+      if (!dir || orig === dir || seen[orig]) {
+        return;
+      } else if (mainPaths.indexOf(dir) < 0) {
+        return updir();
+      }
+
+      var pkgfile = path.join(orig, 'package.json');
+      var exists = fs.existsSync(pkgfile);
+
+      seen[orig] = true;
+
+      // travel up the tree if no package.json here
+      if (!exists) {
+        return updir();
+      }
+
+      try {
+        var info = JSON.parse(fs.readFileSync(pkgfile, 'utf8'));
+        infos[info.name] = info.version;
+      } catch (e) {}
+    })();
+
+    /* eslint-enable consistent-return */
+  });
+
+  return infos;
+};
+
+
+/***/ }),
 /* 203 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
@@ -24913,44 +24988,76 @@ const handleDeploy = async (context, version, environment, payload, commands) =>
         throw e;
     }
 };
+// If the PR was deployed to pre-production, then deploy it to production
+const handlePrMerged = async (context, pr) => {
+    const { productionEnvironment, preProductionEnvironment } = config_1.config;
+    const deployment = await utils_1.findDeployment(context, preProductionEnvironment);
+    if (!deployment) {
+        logging_1.debug(`No deployment found for ${preProductionEnvironment} - quitting`);
+        return;
+    }
+    const deployedPrNumber = utils_1.deploymentPullRequestNumber(deployment);
+    if (deployedPrNumber !== pr.number) {
+        logging_1.debug(`${pr.number} was merged, but is not currently deployed to ${preProductionEnvironment} - quitting`);
+        return;
+    }
+    if (deployment.sha !== pr.head.sha) {
+        const message = [
+            `⚠️ The deployment to ${preProductionEnvironment} was outdated, so I skipped deployment to ${productionEnvironment}.`,
+            comment.mention(`, please check ${comment.code(pr.base.ref)} and deploy manually if necessary.`),
+        ];
+        await utils_1.createComment(context, pr.number, message);
+        return;
+    }
+    logging_1.debug(`${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`);
+    try {
+        const version = await git_1.getShortSha(deployment.sha);
+        const output = await handleDeploy(context, version, productionEnvironment, { pr: pr.number }, [config_1.config.deployCommand]);
+        const body = [
+            comment.mention(`deployed ${version} to ${productionEnvironment} (${comment.runLink("Details")})`),
+            comment.details("Output", comment.codeBlock(output)),
+        ];
+        await utils_1.createComment(context, pr.number, body);
+    }
+    catch (e) {
+        await utils_1.handleError(context, pr.number, `deploy to ${productionEnvironment} failed`, e);
+    }
+};
 const handleQA = async (context, pr) => {
     const environment = config_1.config.preProductionEnvironment;
     const deployment = await utils_1.findDeployment(context, environment);
-    if (utils_1.commandMatches(context, "qa")) {
-        if (utils_1.environmentIsAvailable(context, deployment)) {
+    if (utils_1.environmentIsAvailable(context, deployment)) {
+        try {
+            const { ref } = pr.head;
+            await git_1.checkoutPullRequest(pr);
             try {
-                const { ref } = pr.head;
-                await git_1.checkoutPullRequest(pr);
-                try {
-                    await git_1.updatePullRequest(pr);
-                }
-                catch (e) {
-                    await utils_1.handleError(context, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`, e);
-                    return;
-                }
-                const version = await git_1.getShortCommit();
-                const output = await handleDeploy(context, version, environment, { pr: context.issue().number }, [
-                    `export RELEASE_BRANCH=${ref}`,
-                    config_1.config.releaseCommand,
-                    config_1.config.deployCommand,
-                ]);
-                const body = [
-                    comment.mention(`deployed ${version} to ${environment} (${comment.runLink("Details")})`),
-                    comment.details("Output", comment.codeBlock(output)),
-                ];
-                await utils_1.createComment(context, body);
-                await utils_1.setCommitStatus(context, pr, "success");
+                await git_1.updatePullRequest(pr);
             }
             catch (e) {
-                await utils_1.handleError(context, `release and deploy to ${environment} failed`, e);
+                await utils_1.handleError(context, pr.number, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`, e);
+                return;
             }
+            const version = await git_1.getShortSha("HEAD");
+            const output = await handleDeploy(context, version, environment, { pr: pr.number }, [
+                `export RELEASE_BRANCH=${ref}`,
+                config_1.config.releaseCommand,
+                config_1.config.deployCommand,
+            ]);
+            const body = [
+                comment.mention(`deployed ${version} to ${environment} (${comment.runLink("Details")})`),
+                comment.details("Output", comment.codeBlock(output)),
+            ];
+            await utils_1.createComment(context, pr.number, body);
         }
-        else {
-            const prNumber = utils_1.deploymentPullRequestNumber(deployment);
-            const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
-            await utils_1.createComment(context, [comment.mention(message)]);
-            logging_1.error(message);
+        catch (e) {
+            await utils_1.handleError(context, pr.number, `release and deploy to ${environment} failed`, e);
         }
+    }
+    else {
+        const prNumber = utils_1.deploymentPullRequestNumber(deployment);
+        const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
+        await utils_1.createComment(context, pr.number, [comment.mention(message)]);
+        logging_1.error(message);
     }
 };
 // If the deployed pull request for an environment is not the one contained in
@@ -24964,7 +25071,7 @@ const invalidateDeployedPullRequest = async (context) => {
     const deployedPrNumber = utils_1.deploymentPullRequestNumber(deployment);
     if (typeof deployedPrNumber === "number") {
         if (deployedPrNumber === prNumber) {
-            logging_1.debug("This pull request is currently deployed to ${environment} - nothing to do");
+            logging_1.debug(`This pull request is currently deployed to ${environment} - nothing to do`);
         }
         else {
             const deployedPr = await context.github.pulls.get(context.repo({ pull_number: deployedPrNumber }));
@@ -24976,13 +25083,9 @@ const invalidateDeployedPullRequest = async (context) => {
                     `Run ${comment.code("/qa")} to redeploy your changes to ${environment} or ${comment.code("/skip-qa")} if you want to ignore the changes in ${baseRef}.`,
                     `Note that using ${comment.code("/skip-qa")} will cause the new changes in ${baseRef} to be excluded when this pull request is merged, and they will not be deployed to ${config_1.config.productionEnvironment}.`,
                 ].join(" ");
-                const issueComment = context.repo({
-                    body,
-                    issue_number: deployedPrNumber,
-                });
                 await Promise.all([
                     utils_1.setCommitStatus(context, deployedPr.data, "pending"),
-                    context.github.issues.createComment(issueComment),
+                    utils_1.createComment(context, deployedPrNumber, body),
                 ]);
             }
             else {
@@ -24991,12 +25094,47 @@ const invalidateDeployedPullRequest = async (context) => {
         }
     }
     else {
-        logging_1.debug("No pull request currently deployed to ${environment} - nothing to do");
+        logging_1.debug(`No pull request currently deployed to ${environment} - nothing to do`);
     }
+};
+const updateOutdatedDeployment = async (context, pr) => {
+    const { preProductionEnvironment } = config_1.config;
+    const deployment = await utils_1.findDeployment(context, preProductionEnvironment);
+    let deployedPrNumber;
+    let deployedPr;
+    if (!deployment) {
+        logging_1.debug(`No deployment found for ${preProductionEnvironment} - quitting`);
+        return;
+    }
+    try {
+        deployedPrNumber = utils_1.deploymentPullRequestNumber(deployment);
+        const prResponse = await context.github.pulls.get(context.repo({ pull_number: deployedPrNumber }));
+        deployedPr = prResponse.data;
+    }
+    catch (ex) {
+        logging_1.debug(`Failed to fetch PR data for #${deployedPrNumber}`);
+    }
+    if (!deployedPr) {
+        logging_1.debug(`Could not find PR associated with ${preProductionEnvironment} deployment - quitting`);
+        return;
+    }
+    if (deployedPr.number !== pr.number) {
+        logging_1.debug(`PR synchronize event is unrelated to ${preProductionEnvironment} deployment - nothing to do (${pr.number} synchronized vs ${deployedPr.number} deployed)`);
+        return;
+    }
+    logging_1.debug(`Re-deploying ${deployedPr.number} to ${preProductionEnvironment} with new commits...`);
+    return Promise.all([
+        utils_1.setCommitStatus(context, deployedPr, "pending"),
+        handleQA(context, deployedPr),
+    ]);
 };
 const probot = (app) => {
     // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
     // https://help.github.com/en/actions/reference/events-that-trigger-workflows
+    app.on("pull_request.synchronize", async (context) => {
+        const pr = await context.github.pulls.get(context.issue());
+        await updateOutdatedDeployment(context, pr.data);
+    });
     app.on(["pull_request.opened", "pull_request.reopened"], async (context) => {
         const pr = await context.github.pulls.get(context.issue());
         await utils_1.setCommitStatus(context, pr.data, "pending");
@@ -25010,13 +25148,16 @@ const probot = (app) => {
         switch (true) {
             case utils_1.commandMatches(context, "skip-qa"): {
                 await Promise.all([
-                    utils_1.setCommitStatus(context.issue(), pr.data, "success"),
-                    utils_1.createComment(context, ["Skipping QA 🤠"]),
+                    utils_1.setCommitStatus(context, pr.data, "success"),
+                    utils_1.createComment(context, pr.data.number, ["Skipping QA 🤠"]),
                 ]);
                 break;
             }
             case utils_1.commandMatches(context, "qa"): {
-                await handleQA(context, pr.data);
+                await Promise.all([
+                    utils_1.setCommitStatus(context, pr.data, "pending"),
+                    handleQA(context, pr.data),
+                ]);
                 break;
             }
             default: {
@@ -25025,11 +25166,15 @@ const probot = (app) => {
         }
     });
     app.on("pull_request.closed", async (context) => {
+        const pr = await context.github.pulls.get(context.issue());
         // "If the action is closed and the merged key is true, the pull request was merged"
         // https://developer.github.com/v3/activity/events/types/#pullrequestevent
         if (context.payload.action === "closed" &&
             context.payload.pull_request.merged) {
-            await invalidateDeployedPullRequest(context);
+            await Promise.all([
+                invalidateDeployedPullRequest(context),
+                handlePrMerged(context, pr.data),
+            ]);
         }
     });
 };
@@ -31991,7 +32136,7 @@ var fs = __webpack_require__(747);
 var url = __webpack_require__(835);
 var transports = __webpack_require__(934);
 var path = __webpack_require__(622);
-var lsmod = __webpack_require__(656);
+var lsmod = __webpack_require__(202);
 var stacktrace = __webpack_require__(223);
 var stringify = __webpack_require__(21);
 
@@ -35758,8 +35903,12 @@ exports.commandMatches = (context, match) => {
     const command = (comment || issue || pr).body.match(/^\/([\w-]+)\s*?(.*)?$/m);
     return command && command[1] === match;
 };
-exports.createComment = (context, body) => {
-    const issueComment = context.issue({ body: body.join("\n") });
+exports.createComment = (context, issueNumber, body0) => {
+    const body = typeof body0 === "string" ? body0 : body0.join("\n");
+    const issueComment = context.repo({
+        issue_number: issueNumber,
+        body,
+    });
     return context.github.issues.createComment(issueComment);
 };
 exports.setCommitStatus = async (context, pr, state) => {
@@ -35804,7 +35953,7 @@ exports.createDeployment = (context, ref, environment, payload) => context.githu
     task: "deploy",
     payload: JSON.stringify(payload),
     required_contexts: [],
-    auto_merge: true,
+    auto_merge: false,
     environment,
     ref,
 }));
@@ -35832,13 +35981,13 @@ const errorMessage = (e) => {
         return e.toString();
     }
 };
-exports.handleError = async (context, text, e) => {
+exports.handleError = async (context, issueNumber, text, e) => {
     const message = `${text}: ${comment.code(errorMessage(e))}`;
     const body = [comment.mention(`${message} (${comment.runLink("Details")})`)];
     if (e instanceof shell_1.ShellError) {
         body.push(comment.details("Output", comment.codeBlock(e.output)));
     }
-    await exports.createComment(context, body);
+    await exports.createComment(context, issueNumber, body);
     logging_1.error(message);
 };
 
@@ -46210,48 +46359,9 @@ module.exports = styles;
 /***/ }),
 /* 495 */,
 /* 496 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
+/***/ (function(module, __unusedexports, __webpack_require__) {
 
-"use strict";
-
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-Object.defineProperty(exports, "v1", {
-  enumerable: true,
-  get: function () {
-    return _v.default;
-  }
-});
-Object.defineProperty(exports, "v3", {
-  enumerable: true,
-  get: function () {
-    return _v2.default;
-  }
-});
-Object.defineProperty(exports, "v4", {
-  enumerable: true,
-  get: function () {
-    return _v3.default;
-  }
-});
-Object.defineProperty(exports, "v5", {
-  enumerable: true,
-  get: function () {
-    return _v4.default;
-  }
-});
-
-var _v = _interopRequireDefault(__webpack_require__(765));
-
-var _v2 = _interopRequireDefault(__webpack_require__(161));
-
-var _v3 = _interopRequireDefault(__webpack_require__(703));
-
-var _v4 = _interopRequireDefault(__webpack_require__(935));
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+module.exports = require(__webpack_require__.ab + "src/build/Release/DTraceProviderBindings.node")
 
 /***/ }),
 /* 497 */
@@ -46806,8 +46916,12 @@ module.exports = function (jwtString, secretOrPublicKey, options, callback) {
 /* 506 */,
 /* 507 */,
 /* 508 */
-/***/ (function(__unusedmodule, exports) {
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
 
+function __ncc_wildcard$0 (arg) {
+  if (arg === "Release") return __webpack_require__(496);
+  else if (arg === "Release/obj.target") return __webpack_require__(998);
+}
 var DTraceProvider;
 
 function DTraceProviderStub() {}
@@ -46825,7 +46939,7 @@ var err = null;
 
 for (var i = 0; i < builds.length; i++) {
     try {
-        var binding = require('./src/build/' + builds[i] + '/DTraceProviderBindings');
+        var binding = __ncc_wildcard$0(builds[i]);
         DTraceProvider = binding.DTraceProvider;
         break;
     } catch (e) {
@@ -53145,7 +53259,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // Copyright (c) Christian Tellnes <christian@tellnes.no>
 // tslint:disable
 var wrap_logger_1 = __webpack_require__(154);
-var uuid_1 = __webpack_require__(496);
+var uuid_1 = __webpack_require__(656);
 exports.logRequest = function (_a) {
     var logger = _a.logger;
     return function (req, res, next) {
@@ -70839,78 +70953,48 @@ if (process.platform === 'linux') {
 /***/ }),
 /* 655 */,
 /* 656 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
 
 "use strict";
 
 
-// Original repository: https://github.com/defunctzombie/node-lsmod/
-//
-// [2018-02-09] @kamilogorek - Handle scoped packages structure
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+Object.defineProperty(exports, "v1", {
+  enumerable: true,
+  get: function () {
+    return _v.default;
+  }
+});
+Object.defineProperty(exports, "v3", {
+  enumerable: true,
+  get: function () {
+    return _v2.default;
+  }
+});
+Object.defineProperty(exports, "v4", {
+  enumerable: true,
+  get: function () {
+    return _v3.default;
+  }
+});
+Object.defineProperty(exports, "v5", {
+  enumerable: true,
+  get: function () {
+    return _v4.default;
+  }
+});
 
-// builtin
-var fs = __webpack_require__(747);
-var path = __webpack_require__(622);
+var _v = _interopRequireDefault(__webpack_require__(765));
 
-// node 0.6 support
-fs.existsSync = fs.existsSync || path.existsSync;
+var _v2 = _interopRequireDefault(__webpack_require__(161));
 
-// mainPaths are the paths where our mainprog will be able to load from
-// we store these to avoid grabbing the modules that were loaded as a result
-// of a dependency module loading its dependencies, we only care about deps our
-// mainprog loads
-var mainPaths = (require.main && require.main.paths) || [];
+var _v3 = _interopRequireDefault(__webpack_require__(703));
 
-module.exports = function() {
-  var paths = Object.keys(require.cache || []);
+var _v4 = _interopRequireDefault(__webpack_require__(935));
 
-  // module information
-  var infos = {};
-
-  // paths we have already inspected to avoid traversing again
-  var seen = {};
-
-  paths.forEach(function(p) {
-    /* eslint-disable consistent-return */
-
-    var dir = p;
-
-    (function updir() {
-      var orig = dir;
-      dir = path.dirname(orig);
-
-      if (/@[^/]+$/.test(dir)) {
-        dir = path.dirname(dir);
-      }
-
-      if (!dir || orig === dir || seen[orig]) {
-        return;
-      } else if (mainPaths.indexOf(dir) < 0) {
-        return updir();
-      }
-
-      var pkgfile = path.join(orig, 'package.json');
-      var exists = fs.existsSync(pkgfile);
-
-      seen[orig] = true;
-
-      // travel up the tree if no package.json here
-      if (!exists) {
-        return updir();
-      }
-
-      try {
-        var info = JSON.parse(fs.readFileSync(pkgfile, 'utf8'));
-        infos[info.name] = info.version;
-      } catch (e) {}
-    })();
-
-    /* eslint-enable consistent-return */
-  });
-
-  return infos;
-};
-
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 /***/ }),
 /* 657 */,
@@ -86819,7 +86903,7 @@ module.exports = (...handlers) => {
 /* 876 */
 /***/ (function(module) {
 
-module.exports = {"name":"@octokit/rest","version":"16.43.1","publishConfig":{"access":"public"},"description":"GitHub REST API client for Node.js","keywords":["octokit","github","rest","api-client"],"author":"Gregor Martynus (https://github.com/gr2m)","contributors":[{"name":"Mike de Boer","email":"info@mikedeboer.nl"},{"name":"Fabian Jakobs","email":"fabian@c9.io"},{"name":"Joe Gallo","email":"joe@brassafrax.com"},{"name":"Gregor Martynus","url":"https://github.com/gr2m"}],"repository":"https://github.com/octokit/rest.js","dependencies":{"@octokit/auth-token":"^2.4.0","@octokit/plugin-paginate-rest":"^1.1.1","@octokit/plugin-request-log":"^1.0.0","@octokit/plugin-rest-endpoint-methods":"2.4.0","@octokit/request":"^5.2.0","@octokit/request-error":"^1.0.2","atob-lite":"^2.0.0","before-after-hook":"^2.0.0","btoa-lite":"^1.0.0","deprecation":"^2.0.0","lodash.get":"^4.4.2","lodash.set":"^4.3.2","lodash.uniq":"^4.5.0","octokit-pagination-methods":"^1.1.0","once":"^1.4.0","universal-user-agent":"^4.0.0"},"devDependencies":{"@gimenete/type-writer":"^0.1.3","@octokit/auth":"^1.1.1","@octokit/fixtures-server":"^5.0.6","@octokit/graphql":"^4.2.0","@types/node":"^13.1.0","bundlesize":"^0.18.0","chai":"^4.1.2","compression-webpack-plugin":"^3.1.0","cypress":"^3.0.0","glob":"^7.1.2","http-proxy-agent":"^4.0.0","lodash.camelcase":"^4.3.0","lodash.merge":"^4.6.1","lodash.upperfirst":"^4.3.1","lolex":"^5.1.2","mkdirp":"^1.0.0","mocha":"^7.0.1","mustache":"^4.0.0","nock":"^11.3.3","npm-run-all":"^4.1.2","nyc":"^15.0.0","prettier":"^1.14.2","proxy":"^1.0.0","semantic-release":"^17.0.0","sinon":"^8.0.0","sinon-chai":"^3.0.0","sort-keys":"^4.0.0","string-to-arraybuffer":"^1.0.0","string-to-jsdoc-comment":"^1.0.0","typescript":"^3.3.1","webpack":"^4.0.0","webpack-bundle-analyzer":"^3.0.0","webpack-cli":"^3.0.0"},"types":"index.d.ts","scripts":{"coverage":"nyc report --reporter=html && open coverage/index.html","lint":"prettier --check '{lib,plugins,scripts,test}/**/*.{js,json,ts}' 'docs/*.{js,json}' 'docs/src/**/*' index.js README.md package.json","lint:fix":"prettier --write '{lib,plugins,scripts,test}/**/*.{js,json,ts}' 'docs/*.{js,json}' 'docs/src/**/*' index.js README.md package.json","pretest":"npm run -s lint","test":"nyc mocha test/mocha-node-setup.js \"test/*/**/*-test.js\"","test:browser":"cypress run --browser chrome","build":"npm-run-all build:*","build:ts":"npm run -s update-endpoints:typescript","prebuild:browser":"mkdirp dist/","build:browser":"npm-run-all build:browser:*","build:browser:development":"webpack --mode development --entry . --output-library=Octokit --output=./dist/octokit-rest.js --profile --json > dist/bundle-stats.json","build:browser:production":"webpack --mode production --entry . --plugin=compression-webpack-plugin --output-library=Octokit --output-path=./dist --output-filename=octokit-rest.min.js --devtool source-map","generate-bundle-report":"webpack-bundle-analyzer dist/bundle-stats.json --mode=static --no-open --report dist/bundle-report.html","update-endpoints":"npm-run-all update-endpoints:*","update-endpoints:fetch-json":"node scripts/update-endpoints/fetch-json","update-endpoints:typescript":"node scripts/update-endpoints/typescript","prevalidate:ts":"npm run -s build:ts","validate:ts":"tsc --target es6 --noImplicitAny index.d.ts","postvalidate:ts":"tsc --noEmit --target es6 test/typescript-validate.ts","start-fixtures-server":"octokit-fixtures-server"},"license":"MIT","files":["index.js","index.d.ts","lib","plugins"],"nyc":{"ignore":["test"]},"release":{"publish":["@semantic-release/npm",{"path":"@semantic-release/github","assets":["dist/*","!dist/*.map.gz"]}]},"bundlesize":[{"path":"./dist/octokit-rest.min.js.gz","maxSize":"33 kB"}],"_resolved":"https://registry.npmjs.org/@octokit/rest/-/rest-16.43.1.tgz","_integrity":"sha512-gfFKwRT/wFxq5qlNjnW2dh+qh74XgTQ2B179UX5K1HYCluioWj8Ndbgqw2PVqa1NnVJkGHp2ovMpVn/DImlmkw==","_from":"@octokit/rest@16.43.1"};
+module.exports = {"_args":[["@octokit/rest@16.43.1","/Users/emilymears/_dev/actions-deploy"]],"_from":"@octokit/rest@16.43.1","_id":"@octokit/rest@16.43.1","_inBundle":false,"_integrity":"sha512-gfFKwRT/wFxq5qlNjnW2dh+qh74XgTQ2B179UX5K1HYCluioWj8Ndbgqw2PVqa1NnVJkGHp2ovMpVn/DImlmkw==","_location":"/probot/@octokit/rest","_phantomChildren":{},"_requested":{"type":"version","registry":true,"raw":"@octokit/rest@16.43.1","name":"@octokit/rest","escapedName":"@octokit%2frest","scope":"@octokit","rawSpec":"16.43.1","saveSpec":null,"fetchSpec":"16.43.1"},"_requiredBy":["/probot"],"_resolved":"https://registry.npmjs.org/@octokit/rest/-/rest-16.43.1.tgz","_spec":"16.43.1","_where":"/Users/emilymears/_dev/actions-deploy","author":{"name":"Gregor Martynus","url":"https://github.com/gr2m"},"bugs":{"url":"https://github.com/octokit/rest.js/issues"},"bundlesize":[{"path":"./dist/octokit-rest.min.js.gz","maxSize":"33 kB"}],"contributors":[{"name":"Mike de Boer","email":"info@mikedeboer.nl"},{"name":"Fabian Jakobs","email":"fabian@c9.io"},{"name":"Joe Gallo","email":"joe@brassafrax.com"},{"name":"Gregor Martynus","url":"https://github.com/gr2m"}],"dependencies":{"@octokit/auth-token":"^2.4.0","@octokit/plugin-paginate-rest":"^1.1.1","@octokit/plugin-request-log":"^1.0.0","@octokit/plugin-rest-endpoint-methods":"2.4.0","@octokit/request":"^5.2.0","@octokit/request-error":"^1.0.2","atob-lite":"^2.0.0","before-after-hook":"^2.0.0","btoa-lite":"^1.0.0","deprecation":"^2.0.0","lodash.get":"^4.4.2","lodash.set":"^4.3.2","lodash.uniq":"^4.5.0","octokit-pagination-methods":"^1.1.0","once":"^1.4.0","universal-user-agent":"^4.0.0"},"description":"GitHub REST API client for Node.js","devDependencies":{"@gimenete/type-writer":"^0.1.3","@octokit/auth":"^1.1.1","@octokit/fixtures-server":"^5.0.6","@octokit/graphql":"^4.2.0","@types/node":"^13.1.0","bundlesize":"^0.18.0","chai":"^4.1.2","compression-webpack-plugin":"^3.1.0","cypress":"^3.0.0","glob":"^7.1.2","http-proxy-agent":"^4.0.0","lodash.camelcase":"^4.3.0","lodash.merge":"^4.6.1","lodash.upperfirst":"^4.3.1","lolex":"^5.1.2","mkdirp":"^1.0.0","mocha":"^7.0.1","mustache":"^4.0.0","nock":"^11.3.3","npm-run-all":"^4.1.2","nyc":"^15.0.0","prettier":"^1.14.2","proxy":"^1.0.0","semantic-release":"^17.0.0","sinon":"^8.0.0","sinon-chai":"^3.0.0","sort-keys":"^4.0.0","string-to-arraybuffer":"^1.0.0","string-to-jsdoc-comment":"^1.0.0","typescript":"^3.3.1","webpack":"^4.0.0","webpack-bundle-analyzer":"^3.0.0","webpack-cli":"^3.0.0"},"files":["index.js","index.d.ts","lib","plugins"],"homepage":"https://github.com/octokit/rest.js#readme","keywords":["octokit","github","rest","api-client"],"license":"MIT","name":"@octokit/rest","nyc":{"ignore":["test"]},"publishConfig":{"access":"public"},"release":{"publish":["@semantic-release/npm",{"path":"@semantic-release/github","assets":["dist/*","!dist/*.map.gz"]}]},"repository":{"type":"git","url":"git+https://github.com/octokit/rest.js.git"},"scripts":{"build":"npm-run-all build:*","build:browser":"npm-run-all build:browser:*","build:browser:development":"webpack --mode development --entry . --output-library=Octokit --output=./dist/octokit-rest.js --profile --json > dist/bundle-stats.json","build:browser:production":"webpack --mode production --entry . --plugin=compression-webpack-plugin --output-library=Octokit --output-path=./dist --output-filename=octokit-rest.min.js --devtool source-map","build:ts":"npm run -s update-endpoints:typescript","coverage":"nyc report --reporter=html && open coverage/index.html","generate-bundle-report":"webpack-bundle-analyzer dist/bundle-stats.json --mode=static --no-open --report dist/bundle-report.html","lint":"prettier --check '{lib,plugins,scripts,test}/**/*.{js,json,ts}' 'docs/*.{js,json}' 'docs/src/**/*' index.js README.md package.json","lint:fix":"prettier --write '{lib,plugins,scripts,test}/**/*.{js,json,ts}' 'docs/*.{js,json}' 'docs/src/**/*' index.js README.md package.json","postvalidate:ts":"tsc --noEmit --target es6 test/typescript-validate.ts","prebuild:browser":"mkdirp dist/","pretest":"npm run -s lint","prevalidate:ts":"npm run -s build:ts","start-fixtures-server":"octokit-fixtures-server","test":"nyc mocha test/mocha-node-setup.js \"test/*/**/*-test.js\"","test:browser":"cypress run --browser chrome","update-endpoints":"npm-run-all update-endpoints:*","update-endpoints:fetch-json":"node scripts/update-endpoints/fetch-json","update-endpoints:typescript":"node scripts/update-endpoints/typescript","validate:ts":"tsc --target es6 --noImplicitAny index.d.ts"},"types":"index.d.ts","version":"16.43.1"};
 
 /***/ }),
 /* 877 */
@@ -89812,7 +89896,7 @@ module.exports.safeCycles = safeCycles;
 /* 893 */
 /***/ (function(module) {
 
-module.exports = {"name":"raven","description":"A standalone (Node.js) client for Sentry","keywords":["debugging","errors","exceptions","logging","raven","sentry"],"version":"2.6.4","repository":"git://github.com/getsentry/raven-js.git","license":"BSD-2-Clause","homepage":"https://github.com/getsentry/raven-js","author":"Matt Robenolt <matt@ydekproductions.com>","main":"index.js","bin":{"raven":"./bin/raven"},"scripts":{"lint":"eslint .","test":"NODE_ENV=test istanbul cover _mocha  -- --reporter dot && NODE_ENV=test coffee ./test/run.coffee","test-mocha":"NODE_ENV=test mocha","test-full":"npm run test && cd test/instrumentation && ./run.sh"},"engines":{"node":">= 4.0.0"},"dependencies":{"cookie":"0.3.1","md5":"^2.2.1","stack-trace":"0.0.10","timed-out":"4.0.1","uuid":"3.3.2"},"devDependencies":{"coffee-script":"~1.10.0","connect":"*","eslint":"^4.5.0","eslint-config-prettier":"^2.3.0","express":"*","glob":"~3.1.13","istanbul":"^0.4.3","mocha":"~3.1.2","nock":"~9.0.0","prettier":"^1.6.1","should":"11.2.0","sinon":"^3.3.0"},"prettier":{"singleQuote":true,"bracketSpacing":false,"printWidth":90},"_resolved":"https://registry.npmjs.org/raven/-/raven-2.6.4.tgz","_integrity":"sha512-6PQdfC4+DQSFncowthLf+B6Hr0JpPsFBgTVYTAOq7tCmx/kR4SXbeawtPch20+3QfUcQDoJBLjWW1ybvZ4kXTw==","_from":"raven@2.6.4"};
+module.exports = {"_args":[["raven@2.6.4","/Users/emilymears/_dev/actions-deploy"]],"_from":"raven@2.6.4","_id":"raven@2.6.4","_inBundle":false,"_integrity":"sha512-6PQdfC4+DQSFncowthLf+B6Hr0JpPsFBgTVYTAOq7tCmx/kR4SXbeawtPch20+3QfUcQDoJBLjWW1ybvZ4kXTw==","_location":"/raven","_phantomChildren":{},"_requested":{"type":"version","registry":true,"raw":"raven@2.6.4","name":"raven","escapedName":"raven","rawSpec":"2.6.4","saveSpec":null,"fetchSpec":"2.6.4"},"_requiredBy":["/probot"],"_resolved":"https://registry.npmjs.org/raven/-/raven-2.6.4.tgz","_spec":"2.6.4","_where":"/Users/emilymears/_dev/actions-deploy","author":{"name":"Matt Robenolt","email":"matt@ydekproductions.com"},"bin":{"raven":"bin/raven"},"bugs":{"url":"https://github.com/getsentry/raven-js/issues"},"dependencies":{"cookie":"0.3.1","md5":"^2.2.1","stack-trace":"0.0.10","timed-out":"4.0.1","uuid":"3.3.2"},"description":"A standalone (Node.js) client for Sentry","devDependencies":{"coffee-script":"~1.10.0","connect":"*","eslint":"^4.5.0","eslint-config-prettier":"^2.3.0","express":"*","glob":"~3.1.13","istanbul":"^0.4.3","mocha":"~3.1.2","nock":"~9.0.0","prettier":"^1.6.1","should":"11.2.0","sinon":"^3.3.0"},"engines":{"node":">= 4.0.0"},"homepage":"https://github.com/getsentry/raven-js","keywords":["debugging","errors","exceptions","logging","raven","sentry"],"license":"BSD-2-Clause","main":"index.js","name":"raven","prettier":{"singleQuote":true,"bracketSpacing":false,"printWidth":90},"repository":{"type":"git","url":"git://github.com/getsentry/raven-js.git"},"scripts":{"lint":"eslint .","test":"NODE_ENV=test istanbul cover _mocha  -- --reporter dot && NODE_ENV=test coffee ./test/run.coffee","test-full":"npm run test && cd test/instrumentation && ./run.sh","test-mocha":"NODE_ENV=test mocha"},"version":"2.6.4"};
 
 /***/ }),
 /* 894 */,
@@ -95108,7 +95192,7 @@ exports.checkoutPullRequest = (pr) => {
     const { sha, ref } = pr.head;
     return shell_1.shell([
         `git fetch origin ${sha}:refs/remotes/origin/${ref}`,
-        `git checkout -b ${ref}`,
+        `git checkout ${ref}`,
     ]);
 };
 exports.updatePullRequest = async (pr) => {
@@ -95133,7 +95217,7 @@ exports.updatePullRequest = async (pr) => {
         ]);
     }
 };
-exports.getShortCommit = () => shell_1.shellOutput("git rev-parse --short HEAD").then((s) => s.toString().trim());
+exports.getShortSha = (revision) => shell_1.shellOutput(`git rev-parse --short ${revision}`).then((s) => s.toString().trim());
 
 
 /***/ }),
@@ -97782,6 +97866,15 @@ function keysIn(object) {
 }
 
 module.exports = defaults;
+
+
+/***/ }),
+/* 996 */,
+/* 997 */,
+/* 998 */
+/***/ (function(module) {
+
+module.exports = eval("require")("./src/build/Release/obj.target/DTraceProviderBindings");
 
 
 /***/ })

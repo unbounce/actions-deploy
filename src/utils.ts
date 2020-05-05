@@ -15,8 +15,17 @@ export const commandMatches = (context: Context, match: string): boolean => {
   return command && command[1] === match;
 };
 
-export const createComment = (context: Context, body: string[]) => {
-  const issueComment = context.issue({ body: body.join("\n") });
+export const createComment = (
+  context: Context,
+  issueNumber: number,
+  body0: string | string[]
+) => {
+  const body = typeof body0 === "string" ? body0 : body0.join("\n");
+  const issueComment = context.repo({
+    issue_number: issueNumber,
+    body,
+  });
+
   return context.github.issues.createComment(issueComment);
 };
 
@@ -84,7 +93,7 @@ export const createDeployment = (
       task: "deploy",
       payload: JSON.stringify(payload),
       required_contexts: [],
-      auto_merge: true,
+      auto_merge: false,
       environment,
       ref,
     })
@@ -122,12 +131,17 @@ const errorMessage = (e: any) => {
   }
 };
 
-export const handleError = async (context: Context, text: string, e: Error) => {
+export const handleError = async (
+  context: Context,
+  issueNumber: number,
+  text: string,
+  e: Error
+) => {
   const message = `${text}: ${comment.code(errorMessage(e))}`;
   const body = [comment.mention(`${message} (${comment.runLink("Details")})`)];
   if (e instanceof ShellError) {
     body.push(comment.details("Output", comment.codeBlock(e.output)));
   }
-  await createComment(context, body);
+  await createComment(context, issueNumber, body);
   error(message);
 };

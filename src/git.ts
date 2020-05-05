@@ -5,7 +5,7 @@ export const checkoutPullRequest = (pr: PullRequest) => {
   const { sha, ref } = pr.head;
   return shell([
     `git fetch origin ${sha}:refs/remotes/origin/${ref}`,
-    `git checkout -b ${ref}`,
+    `git checkout ${ref}`,
   ]);
 };
 
@@ -31,5 +31,7 @@ export const updatePullRequest = async (pr: PullRequest) => {
   }
 };
 
-export const getShortCommit = () =>
-  shellOutput("git rev-parse --short HEAD").then((s) => s.toString().trim());
+export const getShortSha = (revision: string) =>
+  shellOutput(`git rev-parse --short ${revision}`).then((s) =>
+    s.toString().trim()
+  );
