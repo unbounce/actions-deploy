@@ -35953,7 +35953,7 @@ exports.createDeployment = (context, ref, environment, payload) => context.githu
     task: "deploy",
     payload: JSON.stringify(payload),
     required_contexts: [],
-    auto_merge: true,
+    auto_merge: false,
     environment,
     ref,
 }));
