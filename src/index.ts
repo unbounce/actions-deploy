@@ -1,8 +1,8 @@
 import { Application, Context } from "probot";
 import adapt from "probot-actions-adapter";
+import type Webhooks from "@octokit/webhooks";
 
 import { config } from "./config";
-import type Webhooks from "@octokit/webhooks";
 import {
   commandMatches,
   createComment,
@@ -227,6 +227,53 @@ const invalidateDeployedPullRequest = async (
   }
 };
 
+// If the deployed pull request for the pre-prod environment is the one contained in
+// `context`, it should be replaced with version currently deployed to production.
+const resetPreProductionDeployment = async (
+  context: Context<Webhooks.WebhookPayloadPullRequest>
+) => {
+  const { productionEnvironment, preProductionEnvironment } = config;
+
+  if (productionEnvironment === preProductionEnvironment) {
+    debug("Production and pre-production environments are the same - quitting");
+    return;
+  }
+
+  const deployment = await findDeployment(context, preProductionEnvironment);
+  const prodDeployment = await findDeployment(context, productionEnvironment);
+  const prNumber = context.payload.pull_request.number;
+  const deployedPrNumber = deploymentPullRequestNumber(deployment);
+
+  if (deployedPrNumber !== prNumber) {
+    debug(
+      `PR ${prNumber} is not currently deployed to ${preProductionEnvironment} - nothing to do`
+    );
+    return;
+  }
+
+  if (!prodDeployment) {
+    debug(`No ${productionEnvironment} deployment found - quitting`);
+    return;
+  }
+
+  const version = await getShortSha(prodDeployment.sha);
+  const output = await handleDeploy(
+    context,
+    version,
+    preProductionEnvironment,
+    { pr: context.issue().number },
+    [config.deployCommand]
+  );
+  const body = [
+    `Reset ${preProductionEnvironment} to version ${version} from ${productionEnvironment} (${comment.runLink(
+      "Details"
+    )}).`,
+    comment.details("Output", comment.codeBlock(output)),
+  ];
+
+  await createComment(context, prNumber, body);
+};
+
 const updateOutdatedDeployment = async (
   context: Context<Webhooks.WebhookPayloadPullRequest>,
   pr: PullRequest
@@ -323,18 +370,21 @@ const probot = (app: Application) => {
   });
 
   app.on("pull_request.closed", async (context) => {
-    const pr = await context.github.pulls.get(context.issue());
+    if (context.payload.action !== "closed") {
+      return;
+    }
 
     // "If the action is closed and the merged key is true, the pull request was merged"
     // https://developer.github.com/v3/activity/events/types/#pullrequestevent
-    if (
-      context.payload.action === "closed" &&
-      context.payload.pull_request.merged
-    ) {
+    if (context.payload.pull_request.merged) {
+      const pr = await context.github.pulls.get(context.issue());
+
       await Promise.all([
         invalidateDeployedPullRequest(context),
         handlePrMerged(context, pr.data),
       ]);
+    } else {
+      await resetPreProductionDeployment(context);
     }
   });
 };

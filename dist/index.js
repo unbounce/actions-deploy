@@ -25097,6 +25097,34 @@ const invalidateDeployedPullRequest = async (context) => {
         logging_1.debug(`No pull request currently deployed to ${environment} - nothing to do`);
     }
 };
+// If the deployed pull request for the pre-prod environment is the one contained in
+// `context`, it should be replaced with version currently deployed to production.
+const resetPreProductionDeployment = async (context) => {
+    const { productionEnvironment, preProductionEnvironment } = config_1.config;
+    if (productionEnvironment === preProductionEnvironment) {
+        logging_1.debug("Production and pre-production environments are the same - quitting");
+        return;
+    }
+    const deployment = await utils_1.findDeployment(context, preProductionEnvironment);
+    const prodDeployment = await utils_1.findDeployment(context, productionEnvironment);
+    const prNumber = context.payload.pull_request.number;
+    const deployedPrNumber = utils_1.deploymentPullRequestNumber(deployment);
+    if (deployedPrNumber !== prNumber) {
+        logging_1.debug(`PR ${prNumber} is not currently deployed to ${preProductionEnvironment} - nothing to do`);
+        return;
+    }
+    if (!prodDeployment) {
+        logging_1.debug(`No ${productionEnvironment} deployment found - quitting`);
+        return;
+    }
+    const version = await git_1.getShortSha(prodDeployment.sha);
+    const output = await handleDeploy(context, version, preProductionEnvironment, { pr: context.issue().number }, [config_1.config.deployCommand]);
+    const body = [
+        `Reset ${preProductionEnvironment} to version ${version} from ${productionEnvironment} (${comment.runLink("Details")}).`,
+        comment.details("Output", comment.codeBlock(output)),
+    ];
+    await utils_1.createComment(context, prNumber, body);
+};
 const updateOutdatedDeployment = async (context, pr) => {
     const { preProductionEnvironment } = config_1.config;
     const deployment = await utils_1.findDeployment(context, preProductionEnvironment);
@@ -25166,15 +25194,20 @@ const probot = (app) => {
         }
     });
     app.on("pull_request.closed", async (context) => {
-        const pr = await context.github.pulls.get(context.issue());
+        if (context.payload.action !== "closed") {
+            return;
+        }
         // "If the action is closed and the merged key is true, the pull request was merged"
         // https://developer.github.com/v3/activity/events/types/#pullrequestevent
-        if (context.payload.action === "closed" &&
-            context.payload.pull_request.merged) {
+        if (context.payload.pull_request.merged) {
+            const pr = await context.github.pulls.get(context.issue());
             await Promise.all([
                 invalidateDeployedPullRequest(context),
                 handlePrMerged(context, pr.data),
             ]);
+        }
+        else {
+            await resetPreProductionDeployment(context);
         }
     });
 };
