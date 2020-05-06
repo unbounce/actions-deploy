@@ -96609,6 +96609,7 @@ function Octokit(plugins, options) {
 
 Object.defineProperty(exports, "__esModule", { value: true });
 const shell_1 = __webpack_require__(798);
+const logging_1 = __webpack_require__(376);
 exports.checkoutPullRequest = (pr) => {
     const { sha, ref } = pr.head;
     return shell_1.shell([
@@ -96628,7 +96629,7 @@ exports.updatePullRequest = async (pr) => {
     }
     catch (e) {
         // If rebase wasn't clean, reset and try regular merge
-        console.log("Rebase failed, trying merge instead");
+        logging_1.debug("Rebase failed, trying merge instead");
         return shell_1.shell([
             `git rebase --abort`,
             `git merge origin/${baseBranch}`,

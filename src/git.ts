@@ -1,5 +1,6 @@
 import { shell, shellOutput } from "./shell";
 import { PullRequest } from "./types";
+import { debug } from "./logging";
 
 export const checkoutPullRequest = (pr: PullRequest) => {
   const { sha, ref } = pr.head;
@@ -20,7 +21,7 @@ export const updatePullRequest = async (pr: PullRequest) => {
     ]);
   } catch (e) {
     // If rebase wasn't clean, reset and try regular merge
-    console.log("Rebase failed, trying merge instead");
+    debug("Rebase failed, trying merge instead");
     return shell([
       `git rebase --abort`,
       `git merge origin/${baseBranch}`,
