@@ -121,7 +121,7 @@ const handlePrMerged = async (
       version,
       productionEnvironment,
       { pr: pr.number },
-      [config.deployCommand]
+      [config.deployCommand, config.verifyCommand]
     );
     const body = [
       comment.mention(

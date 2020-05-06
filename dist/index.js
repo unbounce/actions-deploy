@@ -26400,7 +26400,7 @@ const handlePrMerged = async (context, pr) => {
     logging_1.debug(`${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`);
     try {
         const version = await git_1.getShortSha(deployment.sha);
-        const output = await handleDeploy(context, version, productionEnvironment, { pr: pr.number }, [config_1.config.deployCommand]);
+        const output = await handleDeploy(context, version, productionEnvironment, { pr: pr.number }, [config_1.config.deployCommand, config_1.config.verifyCommand]);
         const body = [
             comment.mention(`deployed ${version} to ${productionEnvironment} (${comment.runLink("Details")})`),
             comment.details("Output", comment.codeBlock(output)),
