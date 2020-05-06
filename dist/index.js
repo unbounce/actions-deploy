@@ -26371,7 +26371,7 @@ const releaseDeployAndVerify = async (context, version, environment, ref) => {
         config_1.config.deployCommand,
         "echo ::endgroup::",
         "echo ::group::Verify",
-        config_1.config.verifyCommand || "echo No verify command provided",
+        config_1.config.verifyCommand,
         "echo ::endgroup::",
     ]);
     const body = [

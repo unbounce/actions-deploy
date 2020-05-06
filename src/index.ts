@@ -68,7 +68,7 @@ const releaseDeployAndVerify = async (
       config.deployCommand,
       "echo ::endgroup::",
       "echo ::group::Verify",
-      config.verifyCommand || "echo No verify command provided",
+      config.verifyCommand,
       "echo ::endgroup::",
     ]
   );
