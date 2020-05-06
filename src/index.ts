@@ -121,7 +121,14 @@ const handlePrMerged = async (
       version,
       productionEnvironment,
       { pr: pr.number },
-      [config.deployCommand, config.verifyCommand]
+      [
+        "echo ::group::Deploy",
+        config.deployCommand,
+        "echo ::endgroup::",
+        "echo ::group::Verify",
+        config.verifyCommand,
+        "echo ::endgroup::",
+      ]
     );
     const body = [
       comment.mention(
@@ -129,7 +136,7 @@ const handlePrMerged = async (
           "Details"
         )})`
       ),
-      comment.details("Output", comment.codeBlock(output)),
+      comment.logToDetails(output),
     ];
 
     await createComment(context, pr.number, body);
@@ -175,7 +182,7 @@ const handleQA = async (context: Context, pr: PullRequest) => {
             "Details"
           )})`
         ),
-        comment.details("Output", comment.codeBlock(output)),
+        comment.logToDetails(output),
       ];
       await createComment(context, pr.number, body);
     } catch (e) {
@@ -287,13 +294,13 @@ const resetPreProductionDeployment = async (
     version,
     preProductionEnvironment,
     { pr: context.issue().number },
-    [config.deployCommand]
+    ["echo ::group::Deploy", config.deployCommand, "echo ::endgroup::"]
   );
   const body = [
     `Reset ${preProductionEnvironment} to version ${version} from ${productionEnvironment} (${comment.runLink(
       "Details"
     )}).`,
-    comment.details("Output", comment.codeBlock(output)),
+    comment.logToDetails(output),
   ];
 
   await createComment(context, prNumber, body);

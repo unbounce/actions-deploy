@@ -26400,10 +26400,17 @@ const handlePrMerged = async (context, pr) => {
     logging_1.debug(`${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`);
     try {
         const version = await git_1.getShortSha(deployment.sha);
-        const output = await handleDeploy(context, version, productionEnvironment, { pr: pr.number }, [config_1.config.deployCommand, config_1.config.verifyCommand]);
+        const output = await handleDeploy(context, version, productionEnvironment, { pr: pr.number }, [
+            "echo ::group::Deploy",
+            config_1.config.deployCommand,
+            "echo ::endgroup::",
+            "echo ::group::Verify",
+            config_1.config.verifyCommand,
+            "echo ::endgroup::",
+        ]);
         const body = [
             comment.mention(`deployed ${version} to ${productionEnvironment} (${comment.runLink("Details")})`),
-            comment.details("Output", comment.codeBlock(output)),
+            comment.logToDetails(output),
         ];
         await utils_1.createComment(context, pr.number, body);
     }
@@ -26429,7 +26436,7 @@ const handleQA = async (context, pr) => {
             const output = await releaseDeployAndVerify(context, version, environment, ref);
             const body = [
                 comment.mention(`deployed ${version} to ${environment} (${comment.runLink("Details")})`),
-                comment.details("Output", comment.codeBlock(output)),
+                comment.logToDetails(output),
             ];
             await utils_1.createComment(context, pr.number, body);
         }
@@ -26505,10 +26512,10 @@ const resetPreProductionDeployment = async (context) => {
         return;
     }
     const version = await git_1.getShortSha(prodDeployment.sha);
-    const output = await handleDeploy(context, version, preProductionEnvironment, { pr: context.issue().number }, [config_1.config.deployCommand]);
+    const output = await handleDeploy(context, version, preProductionEnvironment, { pr: context.issue().number }, ["echo ::group::Deploy", config_1.config.deployCommand, "echo ::endgroup::"]);
     const body = [
         `Reset ${preProductionEnvironment} to version ${version} from ${productionEnvironment} (${comment.runLink("Details")}).`,
-        comment.details("Output", comment.codeBlock(output)),
+        comment.logToDetails(output),
     ];
     await utils_1.createComment(context, prNumber, body);
 };
