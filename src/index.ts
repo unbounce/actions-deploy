@@ -48,13 +48,13 @@ const handleDeploy = async (
   }
 };
 
-const releaseDeployAndVerify = async (
+const releaseDeployAndVerify = (
   context: Context,
   version: string,
   environment: string,
   ref: string
 ) => {
-  const output = await handleDeploy(
+  return handleDeploy(
     context,
     version,
     environment,
@@ -72,14 +72,6 @@ const releaseDeployAndVerify = async (
       "echo ::endgroup::",
     ]
   );
-  const body = [
-    comment.mention(
-      `deployed ${version} to ${environment} (${comment.runLink("Details")})`
-    ),
-    comment.logToDetails(output),
-  ];
-  await createComment(context, context.issue().number, body);
-  return output;
 };
 
 // If the PR was deployed to pre-production, then deploy it to production

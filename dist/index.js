@@ -26362,8 +26362,8 @@ const handleDeploy = async (context, version, environment, payload, commands) =>
         throw e;
     }
 };
-const releaseDeployAndVerify = async (context, version, environment, ref) => {
-    const output = await handleDeploy(context, version, environment, { pr: context.issue().number }, [
+const releaseDeployAndVerify = (context, version, environment, ref) => {
+    return handleDeploy(context, version, environment, { pr: context.issue().number }, [
         "echo ::group::Release",
         `export RELEASE_BRANCH=${ref}`,
         config_1.config.releaseCommand,
@@ -26375,12 +26375,6 @@ const releaseDeployAndVerify = async (context, version, environment, ref) => {
         config_1.config.verifyCommand,
         "echo ::endgroup::",
     ]);
-    const body = [
-        comment.mention(`deployed ${version} to ${environment} (${comment.runLink("Details")})`),
-        comment.logToDetails(output),
-    ];
-    await utils_1.createComment(context, context.issue().number, body);
-    return output;
 };
 // If the PR was deployed to pre-production, then deploy it to production
 const handlePrMerged = async (context, pr) => {
