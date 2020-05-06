@@ -30,5 +30,7 @@ export const updatePullRequest = async (pr: PullRequest) => {
   }
 };
 
-export const getShortCommit = () =>
-  shellOutput("git rev-parse --short HEAD").then((s) => s.toString().trim());
+export const getShortSha = (revision: string) =>
+  shellOutput(`git rev-parse --short ${revision}`).then((s) =>
+    s.toString().trim()
+  );

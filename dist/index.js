@@ -1741,8 +1741,9 @@ const parsimmon_1 = __importDefault(__webpack_require__(270));
 exports.details = (summary, body) => {
     return `<details>\n<summary>${summary}</summary>\n\n${body}\n\n</details>`;
 };
-exports.mention = (body) => {
-    return `@${process.env.GITHUB_ACTOR} ${body}`;
+exports.mention = (body0) => {
+    const body = body0.indexOf(",") === 0 ? body0 : ` ${body0}`;
+    return `@${process.env.GITHUB_ACTOR}${body}`;
 };
 exports.codeBlock = (body) => {
     const ticks = "```";
@@ -26378,39 +26379,78 @@ const releaseDeployAndVerify = async (context, version, environment, ref) => {
         comment.mention(`deployed ${version} to ${environment} (${comment.runLink("Details")})`),
         comment.logToDetails(output),
     ];
-    await utils_1.createComment(context, body);
+    await utils_1.createComment(context, context.issue().number, body);
+    return output;
+};
+// If the PR was deployed to pre-production, then deploy it to production
+const handlePrMerged = async (context, pr) => {
+    const { productionEnvironment, preProductionEnvironment } = config_1.config;
+    const deployment = await utils_1.findDeployment(context, preProductionEnvironment);
+    if (!deployment) {
+        logging_1.debug(`No deployment found for ${preProductionEnvironment} - quitting`);
+        return;
+    }
+    const deployedPrNumber = utils_1.deploymentPullRequestNumber(deployment);
+    if (deployedPrNumber !== pr.number) {
+        logging_1.debug(`${pr.number} was merged, but is not currently deployed to ${preProductionEnvironment} - quitting`);
+        return;
+    }
+    if (deployment.sha !== pr.head.sha) {
+        const message = [
+            `⚠️ The deployment to ${preProductionEnvironment} was outdated, so I skipped deployment to ${productionEnvironment}.`,
+            comment.mention(`, please check ${comment.code(pr.base.ref)} and deploy manually if necessary.`),
+        ];
+        await utils_1.createComment(context, pr.number, message);
+        return;
+    }
+    logging_1.debug(`${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`);
+    try {
+        const version = await git_1.getShortSha(deployment.sha);
+        const output = await handleDeploy(context, version, productionEnvironment, { pr: pr.number }, [config_1.config.deployCommand]);
+        const body = [
+            comment.mention(`deployed ${version} to ${productionEnvironment} (${comment.runLink("Details")})`),
+            comment.details("Output", comment.codeBlock(output)),
+        ];
+        await utils_1.createComment(context, pr.number, body);
+    }
+    catch (e) {
+        await utils_1.handleError(context, pr.number, `deploy to ${productionEnvironment} failed`, e);
+    }
 };
 const handleQA = async (context, pr) => {
     const environment = config_1.config.preProductionEnvironment;
     const deployment = await utils_1.findDeployment(context, environment);
-    if (utils_1.commandMatches(context, "qa")) {
-        if (utils_1.environmentIsAvailable(context, deployment)) {
+    if (utils_1.environmentIsAvailable(context, deployment)) {
+        try {
+            await git_1.checkoutPullRequest(pr);
             try {
-                await git_1.checkoutPullRequest(pr);
-                try {
-                    await git_1.updatePullRequest(pr);
-                }
-                catch (e) {
-                    await utils_1.handleError(context, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`, e);
-                    return;
-                }
-                const { ref } = pr.head;
-                const version = await git_1.getShortCommit();
-                await releaseDeployAndVerify(context, version, environment, ref);
+                await git_1.updatePullRequest(pr);
             }
             catch (e) {
-                await Promise.all([
-                    utils_1.handleError(context, `release and deploy to ${environment} failed`, e),
-                    utils_1.setCommitStatus(context, pr, "failure"),
-                ]);
+                await utils_1.handleError(context, context.issue().number, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`, e);
+                return;
             }
+            const version = await git_1.getShortSha("HEAD");
+            const { ref } = pr.head;
+            const output = await releaseDeployAndVerify(context, version, environment, ref);
+            const body = [
+                comment.mention(`deployed ${version} to ${environment} (${comment.runLink("Details")})`),
+                comment.details("Output", comment.codeBlock(output)),
+            ];
+            await utils_1.createComment(context, pr.number, body);
         }
-        else {
-            const prNumber = utils_1.deploymentPullRequestNumber(deployment);
-            const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
-            await utils_1.createComment(context, [comment.mention(message)]);
-            logging_1.error(message);
+        catch (e) {
+            await Promise.all([
+                utils_1.handleError(context, context.issue().number, `release and deploy to ${environment} failed`, e),
+                utils_1.setCommitStatus(context, pr, "failure"),
+            ]);
         }
+    }
+    else {
+        const prNumber = utils_1.deploymentPullRequestNumber(deployment);
+        const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
+        await utils_1.createComment(context, pr.number, [comment.mention(message)]);
+        logging_1.error(message);
     }
 };
 // If the deployed pull request for an environment is not the one contained in
@@ -26424,7 +26464,7 @@ const invalidateDeployedPullRequest = async (context) => {
     const deployedPrNumber = utils_1.deploymentPullRequestNumber(deployment);
     if (typeof deployedPrNumber === "number") {
         if (deployedPrNumber === prNumber) {
-            logging_1.debug("This pull request is currently deployed to ${environment} - nothing to do");
+            logging_1.debug(`This pull request is currently deployed to ${environment} - nothing to do`);
         }
         else {
             const deployedPr = await context.github.pulls.get(context.repo({ pull_number: deployedPrNumber }));
@@ -26436,13 +26476,9 @@ const invalidateDeployedPullRequest = async (context) => {
                     `Run ${comment.code("/qa")} to redeploy your changes to ${environment} or ${comment.code("/skip-qa")} if you want to ignore the changes in ${baseRef}.`,
                     `Note that using ${comment.code("/skip-qa")} will cause the new changes in ${baseRef} to be excluded when this pull request is merged, and they will not be deployed to ${config_1.config.productionEnvironment}.`,
                 ].join(" ");
-                const issueComment = context.repo({
-                    body,
-                    issue_number: deployedPrNumber,
-                });
                 await Promise.all([
                     utils_1.setCommitStatus(context, deployedPr.data, "pending"),
-                    context.github.issues.createComment(issueComment),
+                    utils_1.createComment(context, deployedPrNumber, body),
                 ]);
             }
             else {
@@ -26451,17 +26487,80 @@ const invalidateDeployedPullRequest = async (context) => {
         }
     }
     else {
-        logging_1.debug("No pull request currently deployed to ${environment} - nothing to do");
+        logging_1.debug(`No pull request currently deployed to ${environment} - nothing to do`);
     }
 };
+// If the deployed pull request for the pre-prod environment is the one contained in
+// `context`, it should be replaced with version currently deployed to production.
+const resetPreProductionDeployment = async (context) => {
+    const { productionEnvironment, preProductionEnvironment } = config_1.config;
+    if (productionEnvironment === preProductionEnvironment) {
+        logging_1.debug("Production and pre-production environments are the same - quitting");
+        return;
+    }
+    const deployment = await utils_1.findDeployment(context, preProductionEnvironment);
+    const prodDeployment = await utils_1.findDeployment(context, productionEnvironment);
+    const prNumber = context.payload.pull_request.number;
+    const deployedPrNumber = utils_1.deploymentPullRequestNumber(deployment);
+    if (deployedPrNumber !== prNumber) {
+        logging_1.debug(`PR ${prNumber} is not currently deployed to ${preProductionEnvironment} - nothing to do`);
+        return;
+    }
+    if (!prodDeployment) {
+        logging_1.debug(`No ${productionEnvironment} deployment found - quitting`);
+        return;
+    }
+    const version = await git_1.getShortSha(prodDeployment.sha);
+    const output = await handleDeploy(context, version, preProductionEnvironment, { pr: context.issue().number }, [config_1.config.deployCommand]);
+    const body = [
+        `Reset ${preProductionEnvironment} to version ${version} from ${productionEnvironment} (${comment.runLink("Details")}).`,
+        comment.details("Output", comment.codeBlock(output)),
+    ];
+    await utils_1.createComment(context, prNumber, body);
+};
+const updateOutdatedDeployment = async (context, pr) => {
+    const { preProductionEnvironment } = config_1.config;
+    const deployment = await utils_1.findDeployment(context, preProductionEnvironment);
+    let deployedPrNumber;
+    let deployedPr;
+    if (!deployment) {
+        logging_1.debug(`No deployment found for ${preProductionEnvironment} - quitting`);
+        return;
+    }
+    try {
+        deployedPrNumber = utils_1.deploymentPullRequestNumber(deployment);
+        const prResponse = await context.github.pulls.get(context.repo({ pull_number: deployedPrNumber }));
+        deployedPr = prResponse.data;
+    }
+    catch (ex) {
+        logging_1.debug(`Failed to fetch PR data for #${deployedPrNumber}`);
+    }
+    if (!deployedPr) {
+        logging_1.debug(`Could not find PR associated with ${preProductionEnvironment} deployment - quitting`);
+        return;
+    }
+    if (deployedPr.number !== pr.number) {
+        logging_1.debug(`PR synchronize event is unrelated to ${preProductionEnvironment} deployment - nothing to do (${pr.number} synchronized vs ${deployedPr.number} deployed)`);
+        return;
+    }
+    logging_1.debug(`Re-deploying ${deployedPr.number} to ${preProductionEnvironment} with new commits...`);
+    return Promise.all([
+        utils_1.setCommitStatus(context, deployedPr, "pending"),
+        handleQA(context, deployedPr),
+    ]);
+};
 const commentPullRequestNotDeployed = (context) => {
-    return utils_1.createComment(context, [
+    return utils_1.createComment(context, context.issue().number, [
         `This pull request has not been deployed yet. You can use ${comment.code("/qa")} to deploy it to ${config_1.config.preProductionEnvironment} or ${comment.code("/skip-qa")} to not deploy this pull request.`,
     ]);
 };
 const probot = (app) => {
     // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
     // https://help.github.com/en/actions/reference/events-that-trigger-workflows
+    app.on("pull_request.synchronize", async (context) => {
+        const pr = await context.github.pulls.get(context.issue());
+        await updateOutdatedDeployment(context, pr.data);
+    });
     app.on(["pull_request.opened", "pull_request.reopened"], async (context) => {
         const pr = await context.github.pulls.get(context.issue());
         await utils_1.setCommitStatus(context, pr.data, "pending");
@@ -26476,12 +26575,15 @@ const probot = (app) => {
             case utils_1.commandMatches(context, "skip-qa"): {
                 await Promise.all([
                     utils_1.setCommitStatus(context, pr.data, "success"),
-                    utils_1.createComment(context, ["Skipping QA 🤠"]),
+                    utils_1.createComment(context, pr.data.number, ["Skipping QA 🤠"]),
                 ]);
                 break;
             }
             case utils_1.commandMatches(context, "qa"): {
-                await handleQA(context, pr.data);
+                await Promise.all([
+                    utils_1.setCommitStatus(context, pr.data, "pending"),
+                    handleQA(context, pr.data),
+                ]);
                 break;
             }
             case utils_1.commandMatches(context, "failed-qa"): {
@@ -26508,11 +26610,20 @@ const probot = (app) => {
         }
     });
     app.on("pull_request.closed", async (context) => {
+        if (context.payload.action !== "closed") {
+            return;
+        }
         // "If the action is closed and the merged key is true, the pull request was merged"
         // https://developer.github.com/v3/activity/events/types/#pullrequestevent
-        if (context.payload.action === "closed" &&
-            context.payload.pull_request.merged) {
-            await invalidateDeployedPullRequest(context);
+        if (context.payload.pull_request.merged) {
+            const pr = await context.github.pulls.get(context.issue());
+            await Promise.all([
+                invalidateDeployedPullRequest(context),
+                handlePrMerged(context, pr.data),
+            ]);
+        }
+        else {
+            await resetPreProductionDeployment(context);
         }
     });
 };
@@ -37241,8 +37352,12 @@ exports.commandMatches = (context, match) => {
     const command = (comment || issue || pr).body.match(/^\/([\w-]+)\s*?(.*)?$/m);
     return command && command[1] === match;
 };
-exports.createComment = (context, body) => {
-    const issueComment = context.issue({ body: body.join("\n") });
+exports.createComment = (context, issueNumber, body0) => {
+    const body = typeof body0 === "string" ? body0 : body0.join("\n");
+    const issueComment = context.repo({
+        issue_number: issueNumber,
+        body,
+    });
     return context.github.issues.createComment(issueComment);
 };
 exports.setCommitStatus = async (context, pr, state) => {
@@ -37301,7 +37416,7 @@ exports.createDeployment = (context, ref, environment, payload) => context.githu
     task: "deploy",
     payload: JSON.stringify(payload),
     required_contexts: [],
-    auto_merge: true,
+    auto_merge: false,
     environment,
     ref,
 }));
@@ -37329,13 +37444,13 @@ const errorMessage = (e) => {
         return e.toString();
     }
 };
-exports.handleError = async (context, text, e) => {
+exports.handleError = async (context, issueNumber, text, e) => {
     const message = `${text}: ${comment.code(errorMessage(e))}`;
     const body = [comment.mention(`${message} (${comment.runLink("Details")})`)];
     if (e instanceof shell_1.ShellError) {
         body.push(comment.logToDetails(e.output));
     }
-    await exports.createComment(context, body);
+    await exports.createComment(context, issueNumber, body);
     logging_1.error(message);
 };
 
@@ -96637,7 +96752,7 @@ exports.updatePullRequest = async (pr) => {
         ]);
     }
 };
-exports.getShortCommit = () => shell_1.shellOutput("git rev-parse --short HEAD").then((s) => s.toString().trim());
+exports.getShortSha = (revision) => shell_1.shellOutput(`git rev-parse --short ${revision}`).then((s) => s.toString().trim());
 
 
 /***/ }),
