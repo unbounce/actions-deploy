@@ -37333,7 +37333,7 @@ exports.handleError = async (context, text, e) => {
     const message = `${text}: ${comment.code(errorMessage(e))}`;
     const body = [comment.mention(`${message} (${comment.runLink("Details")})`)];
     if (e instanceof shell_1.ShellError) {
-        body.push(comment.details("Output", comment.codeBlock(e.output)));
+        body.push(comment.logToDetails(e.output));
     }
     await exports.createComment(context, body);
     logging_1.error(message);

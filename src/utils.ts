@@ -158,7 +158,7 @@ export const handleError = async (context: Context, text: string, e: Error) => {
   const message = `${text}: ${comment.code(errorMessage(e))}`;
   const body = [comment.mention(`${message} (${comment.runLink("Details")})`)];
   if (e instanceof ShellError) {
-    body.push(comment.details("Output", comment.codeBlock(e.output)));
+    body.push(comment.logToDetails(e.output));
   }
   await createComment(context, body);
   error(message);
