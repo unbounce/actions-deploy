@@ -1729,13 +1729,17 @@ function parseOptions(options, log, hook) {
 
 /***/ }),
 /* 38 */
-/***/ (function(__unusedmodule, exports) {
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
 
 "use strict";
 
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
+const parsimmon_1 = __importDefault(__webpack_require__(270));
 exports.details = (summary, body) => {
-    return `<details>\n<summary>${summary}</summary>\n\n${body}\n</details>`;
+    return `<details>\n<summary>${summary}</summary>\n\n${body}\n\n</details>`;
 };
 exports.mention = (body0) => {
     const body = body0.indexOf(",") === 0 ? body0 : ` ${body0}`;
@@ -1752,6 +1756,56 @@ exports.code = (body) => {
 exports.runLink = (text) => {
     const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}?check_suite_focus=true`;
     return `[${text}](${url})`;
+};
+const createLogToDetailsParser = () => {
+    const startRe = /::group::(\w+)?/;
+    const startGroup = parsimmon_1.default.regex(startRe, 1);
+    const endRe = /::endgroup::\s*/;
+    const endGroup = parsimmon_1.default.regex(endRe);
+    const textThenEndgroup = parsimmon_1.default.regex(/[\s\S]*?(?=::endgroup::\s*)/).trim(parsimmon_1.default.optWhitespace);
+    const textThenEnd = parsimmon_1.default.regex(/[\s\S]*?(?!::endgroup::\s*)$/).trim(parsimmon_1.default.optWhitespace);
+    const groupParser = parsimmon_1.default.seqMap(parsimmon_1.default.alt(parsimmon_1.default.seq(startGroup, textThenEndgroup, endGroup), parsimmon_1.default.seq(startGroup, textThenEnd, parsimmon_1.default.end)), ([start, middle, _end]) => {
+        const name = start ? start : "Details";
+        return exports.details(name, exports.codeBlock(middle));
+    }).trim(parsimmon_1.default.optWhitespace);
+    return groupParser.many();
+};
+const logToDetailsParser = createLogToDetailsParser();
+// Parse log output into <details> blocks based on GitHub Actions group
+// annotations.
+//
+// For example:
+//
+// ::group::Name
+// One
+// Two
+// ::endgroup::
+//
+// will be converted to:
+//
+// <details>
+// <summary>Name</summary>
+// ```
+// One
+// Two
+// ```
+// </details>
+//
+// Supports multiple groups in succession and the omission of a final
+// ::endgroup:: (in the case that the running script was not able to emit it do
+// to an earlier failure).
+//
+// If any text is found outside of a group, or if no groups are used, the log
+// output will be returned as a single code block.
+//
+exports.logToDetails = (log) => {
+    const parsed = logToDetailsParser.parse(log);
+    if (parsed.status) {
+        return parsed.value.join("\n");
+    }
+    else {
+        return exports.codeBlock(log);
+    }
 };
 
 
@@ -13717,81 +13771,7 @@ exports.zipMap = zipMap;
 
 /***/ }),
 /* 201 */,
-/* 202 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-"use strict";
-
-
-// Original repository: https://github.com/defunctzombie/node-lsmod/
-//
-// [2018-02-09] @kamilogorek - Handle scoped packages structure
-
-// builtin
-var fs = __webpack_require__(747);
-var path = __webpack_require__(622);
-
-// node 0.6 support
-fs.existsSync = fs.existsSync || path.existsSync;
-
-// mainPaths are the paths where our mainprog will be able to load from
-// we store these to avoid grabbing the modules that were loaded as a result
-// of a dependency module loading its dependencies, we only care about deps our
-// mainprog loads
-var mainPaths = (require.main && require.main.paths) || [];
-
-module.exports = function() {
-  var paths = Object.keys(require.cache || []);
-
-  // module information
-  var infos = {};
-
-  // paths we have already inspected to avoid traversing again
-  var seen = {};
-
-  paths.forEach(function(p) {
-    /* eslint-disable consistent-return */
-
-    var dir = p;
-
-    (function updir() {
-      var orig = dir;
-      dir = path.dirname(orig);
-
-      if (/@[^/]+$/.test(dir)) {
-        dir = path.dirname(dir);
-      }
-
-      if (!dir || orig === dir || seen[orig]) {
-        return;
-      } else if (mainPaths.indexOf(dir) < 0) {
-        return updir();
-      }
-
-      var pkgfile = path.join(orig, 'package.json');
-      var exists = fs.existsSync(pkgfile);
-
-      seen[orig] = true;
-
-      // travel up the tree if no package.json here
-      if (!exists) {
-        return updir();
-      }
-
-      try {
-        var info = JSON.parse(fs.readFileSync(pkgfile, 'utf8'));
-        infos[info.name] = info.version;
-      } catch (e) {}
-    })();
-
-    /* eslint-enable consistent-return */
-  });
-
-  return infos;
-};
-
-
-/***/ }),
+/* 202 */,
 /* 203 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
@@ -19671,7 +19651,1401 @@ module.exports = {"100":"Continue","101":"Switching Protocols","102":"Processing
 
 /***/ }),
 /* 269 */,
-/* 270 */,
+/* 270 */
+/***/ (function(module) {
+
+"use strict";
+
+
+function Parsimmon(action) {
+  if (!(this instanceof Parsimmon)) {
+    return new Parsimmon(action);
+  }
+  this._ = action;
+}
+
+var _ = Parsimmon.prototype;
+
+function times(n, f) {
+  var i = 0;
+  for (i; i < n; i++) {
+    f(i);
+  }
+}
+
+function forEach(f, arr) {
+  times(arr.length, function(i) {
+    f(arr[i], i, arr);
+  });
+}
+
+function reduce(f, seed, arr) {
+  forEach(function(elem, i, arr) {
+    seed = f(seed, elem, i, arr);
+  }, arr);
+  return seed;
+}
+
+function map(f, arr) {
+  return reduce(
+    function(acc, elem, i, a) {
+      return acc.concat([f(elem, i, a)]);
+    },
+    [],
+    arr
+  );
+}
+
+function lshiftBuffer(input) {
+  var asTwoBytes = reduce(
+    function(a, v, i, b) {
+      return a.concat(
+        i === b.length - 1
+          ? Buffer.from([v, 0]).readUInt16BE(0)
+          : b.readUInt16BE(i)
+      );
+    },
+    [],
+    input
+  );
+  return Buffer.from(
+    map(function(x) {
+      return ((x << 1) & 0xffff) >> 8;
+    }, asTwoBytes)
+  );
+}
+
+function consumeBitsFromBuffer(n, input) {
+  var state = { v: 0, buf: input };
+  times(n, function() {
+    state = {
+      v: (state.v << 1) | bitPeekBuffer(state.buf),
+      buf: lshiftBuffer(state.buf)
+    };
+  });
+  return state;
+}
+
+function bitPeekBuffer(input) {
+  return input[0] >> 7;
+}
+
+function sum(numArr) {
+  return reduce(
+    function(x, y) {
+      return x + y;
+    },
+    0,
+    numArr
+  );
+}
+
+function find(pred, arr) {
+  return reduce(
+    function(found, elem) {
+      return found || (pred(elem) ? elem : found);
+    },
+    null,
+    arr
+  );
+}
+
+function bufferExists() {
+  return typeof Buffer !== "undefined";
+}
+
+function ensureBuffer() {
+  if (!bufferExists()) {
+    throw new Error(
+      "Buffer global does not exist; please use webpack if you need to parse Buffers in the browser."
+    );
+  }
+}
+
+function bitSeq(alignments) {
+  ensureBuffer();
+  var totalBits = sum(alignments);
+  if (totalBits % 8 !== 0) {
+    throw new Error(
+      "The bits [" +
+        alignments.join(", ") +
+        "] add up to " +
+        totalBits +
+        " which is not an even number of bytes; the total should be divisible by 8"
+    );
+  }
+  var bytes = totalBits / 8;
+
+  var tooBigRange = find(function(x) {
+    return x > 48;
+  }, alignments);
+  if (tooBigRange) {
+    throw new Error(
+      tooBigRange + " bit range requested exceeds 48 bit (6 byte) Number max."
+    );
+  }
+
+  return new Parsimmon(function(input, i) {
+    var newPos = bytes + i;
+    if (newPos > input.length) {
+      return makeFailure(i, bytes.toString() + " bytes");
+    }
+    return makeSuccess(
+      newPos,
+      reduce(
+        function(acc, bits) {
+          var state = consumeBitsFromBuffer(bits, acc.buf);
+          return {
+            coll: acc.coll.concat(state.v),
+            buf: state.buf
+          };
+        },
+        { coll: [], buf: input.slice(i, newPos) },
+        alignments
+      ).coll
+    );
+  });
+}
+
+function bitSeqObj(namedAlignments) {
+  ensureBuffer();
+  var seenKeys = {};
+  var totalKeys = 0;
+  var fullAlignments = map(function(item) {
+    if (isArray(item)) {
+      var pair = item;
+      if (pair.length !== 2) {
+        throw new Error(
+          "[" +
+            pair.join(", ") +
+            "] should be length 2, got length " +
+            pair.length
+        );
+      }
+      assertString(pair[0]);
+      assertNumber(pair[1]);
+      if (Object.prototype.hasOwnProperty.call(seenKeys, pair[0])) {
+        throw new Error("duplicate key in bitSeqObj: " + pair[0]);
+      }
+      seenKeys[pair[0]] = true;
+      totalKeys++;
+      return pair;
+    } else {
+      assertNumber(item);
+      return [null, item];
+    }
+  }, namedAlignments);
+  if (totalKeys < 1) {
+    throw new Error(
+      "bitSeqObj expects at least one named pair, got [" +
+        namedAlignments.join(", ") +
+        "]"
+    );
+  }
+  var namesOnly = map(function(pair) {
+    return pair[0];
+  }, fullAlignments);
+  var alignmentsOnly = map(function(pair) {
+    return pair[1];
+  }, fullAlignments);
+
+  return bitSeq(alignmentsOnly).map(function(parsed) {
+    var namedParsed = map(function(name, i) {
+      return [name, parsed[i]];
+    }, namesOnly);
+
+    return reduce(
+      function(obj, kv) {
+        if (kv[0] !== null) {
+          obj[kv[0]] = kv[1];
+        }
+        return obj;
+      },
+      {},
+      namedParsed
+    );
+  });
+}
+
+function parseBufferFor(other, length) {
+  return new Parsimmon(function(input, i) {
+    ensureBuffer();
+    if (i + length > input.length) {
+      return makeFailure(i, length + " bytes for " + other);
+    }
+    return makeSuccess(i + length, input.slice(i, i + length));
+  });
+}
+
+function parseBuffer(length) {
+  return parseBufferFor("buffer", length).map(function(unsafe) {
+    return Buffer.from(unsafe);
+  });
+}
+
+function encodedString(encoding, length) {
+  return parseBufferFor("string", length).map(function(buff) {
+    return buff.toString(encoding);
+  });
+}
+
+function isInteger(value) {
+  return typeof value === "number" && Math.floor(value) === value;
+}
+
+function assertValidIntegerByteLengthFor(who, length) {
+  if (!isInteger(length) || length < 0 || length > 6) {
+    throw new Error(who + " requires integer length in range [0, 6].");
+  }
+}
+
+function uintBE(length) {
+  assertValidIntegerByteLengthFor("uintBE", length);
+  return parseBufferFor("uintBE(" + length + ")", length).map(function(buff) {
+    return buff.readUIntBE(0, length);
+  });
+}
+
+function uintLE(length) {
+  assertValidIntegerByteLengthFor("uintLE", length);
+  return parseBufferFor("uintLE(" + length + ")", length).map(function(buff) {
+    return buff.readUIntLE(0, length);
+  });
+}
+
+function intBE(length) {
+  assertValidIntegerByteLengthFor("intBE", length);
+  return parseBufferFor("intBE(" + length + ")", length).map(function(buff) {
+    return buff.readIntBE(0, length);
+  });
+}
+
+function intLE(length) {
+  assertValidIntegerByteLengthFor("intLE", length);
+  return parseBufferFor("intLE(" + length + ")", length).map(function(buff) {
+    return buff.readIntLE(0, length);
+  });
+}
+
+function floatBE() {
+  return parseBufferFor("floatBE", 4).map(function(buff) {
+    return buff.readFloatBE(0);
+  });
+}
+
+function floatLE() {
+  return parseBufferFor("floatLE", 4).map(function(buff) {
+    return buff.readFloatLE(0);
+  });
+}
+
+function doubleBE() {
+  return parseBufferFor("doubleBE", 8).map(function(buff) {
+    return buff.readDoubleBE(0);
+  });
+}
+
+function doubleLE() {
+  return parseBufferFor("doubleLE", 8).map(function(buff) {
+    return buff.readDoubleLE(0);
+  });
+}
+
+function toArray(arrLike) {
+  return Array.prototype.slice.call(arrLike);
+}
+// -*- Helpers -*-
+
+function isParser(obj) {
+  return obj instanceof Parsimmon;
+}
+
+function isArray(x) {
+  return {}.toString.call(x) === "[object Array]";
+}
+
+function isBuffer(x) {
+  /* global Buffer */
+  return bufferExists() && Buffer.isBuffer(x);
+}
+
+function makeSuccess(index, value) {
+  return {
+    status: true,
+    index: index,
+    value: value,
+    furthest: -1,
+    expected: []
+  };
+}
+
+function makeFailure(index, expected) {
+  if (!isArray(expected)) {
+    expected = [expected];
+  }
+  return {
+    status: false,
+    index: -1,
+    value: null,
+    furthest: index,
+    expected: expected
+  };
+}
+
+function mergeReplies(result, last) {
+  if (!last) {
+    return result;
+  }
+  if (result.furthest > last.furthest) {
+    return result;
+  }
+  var expected =
+    result.furthest === last.furthest
+      ? union(result.expected, last.expected)
+      : last.expected;
+  return {
+    status: result.status,
+    index: result.index,
+    value: result.value,
+    furthest: last.furthest,
+    expected: expected
+  };
+}
+
+function makeLineColumnIndex(input, i) {
+  if (isBuffer(input)) {
+    return {
+      offset: i,
+      line: -1,
+      column: -1
+    };
+  }
+  var lines = input.slice(0, i).split("\n");
+  // Note that unlike the character offset, the line and column offsets are
+  // 1-based.
+  var lineWeAreUpTo = lines.length;
+  var columnWeAreUpTo = lines[lines.length - 1].length + 1;
+  return {
+    offset: i,
+    line: lineWeAreUpTo,
+    column: columnWeAreUpTo
+  };
+}
+
+// Returns the sorted set union of two arrays of strings
+function union(xs, ys) {
+  var obj = {};
+  for (var i = 0; i < xs.length; i++) {
+    obj[xs[i]] = true;
+  }
+  for (var j = 0; j < ys.length; j++) {
+    obj[ys[j]] = true;
+  }
+  var keys = [];
+  for (var k in obj) {
+    if ({}.hasOwnProperty.call(obj, k)) {
+      keys.push(k);
+    }
+  }
+  keys.sort();
+  return keys;
+}
+
+function assertParser(p) {
+  if (!isParser(p)) {
+    throw new Error("not a parser: " + p);
+  }
+}
+
+function get(input, i) {
+  if (typeof input === "string") {
+    return input.charAt(i);
+  }
+  return input[i];
+}
+
+// TODO[ES5]: Switch to Array.isArray eventually.
+function assertArray(x) {
+  if (!isArray(x)) {
+    throw new Error("not an array: " + x);
+  }
+}
+
+function assertNumber(x) {
+  if (typeof x !== "number") {
+    throw new Error("not a number: " + x);
+  }
+}
+
+function assertRegexp(x) {
+  if (!(x instanceof RegExp)) {
+    throw new Error("not a regexp: " + x);
+  }
+  var f = flags(x);
+  for (var i = 0; i < f.length; i++) {
+    var c = f.charAt(i);
+    // Only allow regexp flags [imu] for now, since [g] and [y] specifically
+    // mess up Parsimmon. If more non-stateful regexp flags are added in the
+    // future, this will need to be revisited.
+    if (c !== "i" && c !== "m" && c !== "u") {
+      throw new Error('unsupported regexp flag "' + c + '": ' + x);
+    }
+  }
+}
+
+function assertFunction(x) {
+  if (typeof x !== "function") {
+    throw new Error("not a function: " + x);
+  }
+}
+
+function assertString(x) {
+  if (typeof x !== "string") {
+    throw new Error("not a string: " + x);
+  }
+}
+
+// -*- Error Formatting -*-
+
+var linesBeforeStringError = 2;
+var linesAfterStringError = 3;
+var bytesPerLine = 8;
+var bytesBefore = bytesPerLine * 5;
+var bytesAfter = bytesPerLine * 4;
+var defaultLinePrefix = "  ";
+
+function repeat(string, amount) {
+  return new Array(amount + 1).join(string);
+}
+
+function formatExpected(expected) {
+  if (expected.length === 1) {
+    return "Expected:\n\n" + expected[0];
+  }
+  return "Expected one of the following: \n\n" + expected.join(", ");
+}
+
+function leftPad(str, pad, char) {
+  var add = pad - str.length;
+  if (add <= 0) {
+    return str;
+  }
+  return repeat(char, add) + str;
+}
+
+function toChunks(arr, chunkSize) {
+  var length = arr.length;
+  var chunks = [];
+  var chunkIndex = 0;
+
+  if (length <= chunkSize) {
+    return [arr.slice()];
+  }
+
+  for (var i = 0; i < length; i++) {
+    if (!chunks[chunkIndex]) {
+      chunks.push([]);
+    }
+
+    chunks[chunkIndex].push(arr[i]);
+
+    if ((i + 1) % chunkSize === 0) {
+      chunkIndex++;
+    }
+  }
+
+  return chunks;
+}
+
+// Get a range of indexes including `i`-th element and `before` and `after` amount of elements from `arr`.
+function rangeFromIndexAndOffsets(i, before, after, length) {
+  return {
+    // Guard against the negative upper bound for lines included in the output.
+    from: i - before > 0 ? i - before : 0,
+    to: i + after > length ? length : i + after
+  };
+}
+
+function byteRangeToRange(byteRange) {
+  // Exception for inputs smaller than `bytesPerLine`
+  if (byteRange.from === 0 && byteRange.to === 1) {
+    return {
+      from: byteRange.from,
+      to: byteRange.to
+    };
+  }
+
+  return {
+    from: byteRange.from / bytesPerLine,
+    // Round `to`, so we don't get float if the amount of bytes is not divisible by `bytesPerLine`
+    to: Math.floor(byteRange.to / bytesPerLine)
+  };
+}
+
+function formatGot(input, error) {
+  var index = error.index;
+  var i = index.offset;
+
+  var verticalMarkerLength = 1;
+  var column;
+  var lineWithErrorIndex;
+  var lines;
+  var lineRange;
+  var lastLineNumberLabelLength;
+
+  if (i === input.length) {
+    return "Got the end of the input";
+  }
+
+  if (isBuffer(input)) {
+    var byteLineWithErrorIndex = i - (i % bytesPerLine);
+    var columnByteIndex = i - byteLineWithErrorIndex;
+    var byteRange = rangeFromIndexAndOffsets(
+      byteLineWithErrorIndex,
+      bytesBefore,
+      bytesAfter + bytesPerLine,
+      input.length
+    );
+    var bytes = input.slice(byteRange.from, byteRange.to);
+    var bytesInChunks = toChunks(bytes.toJSON().data, bytesPerLine);
+
+    var byteLines = map(function(byteRow) {
+      return map(function(byteValue) {
+        // Prefix byte values with a `0` if they are shorter than 2 characters.
+        return leftPad(byteValue.toString(16), 2, "0");
+      }, byteRow);
+    }, bytesInChunks);
+
+    lineRange = byteRangeToRange(byteRange);
+    lineWithErrorIndex = byteLineWithErrorIndex / bytesPerLine;
+    column = columnByteIndex * 3;
+
+    // Account for an extra space.
+    if (columnByteIndex >= 4) {
+      column += 1;
+    }
+
+    verticalMarkerLength = 2;
+    lines = map(function(byteLine) {
+      return byteLine.length <= 4
+        ? byteLine.join(" ")
+        : byteLine.slice(0, 4).join(" ") + "  " + byteLine.slice(4).join(" ");
+    }, byteLines);
+    lastLineNumberLabelLength = (
+      (lineRange.to > 0 ? lineRange.to - 1 : lineRange.to) * 8
+    ).toString(16).length;
+
+    if (lastLineNumberLabelLength < 2) {
+      lastLineNumberLabelLength = 2;
+    }
+  } else {
+    var inputLines = input.split(/\r\n|[\n\r\u2028\u2029]/);
+    column = index.column - 1;
+    lineWithErrorIndex = index.line - 1;
+    lineRange = rangeFromIndexAndOffsets(
+      lineWithErrorIndex,
+      linesBeforeStringError,
+      linesAfterStringError,
+      inputLines.length
+    );
+
+    lines = inputLines.slice(lineRange.from, lineRange.to);
+    lastLineNumberLabelLength = lineRange.to.toString().length;
+  }
+
+  var lineWithErrorCurrentIndex = lineWithErrorIndex - lineRange.from;
+
+  if (isBuffer(input)) {
+    lastLineNumberLabelLength = (
+      (lineRange.to > 0 ? lineRange.to - 1 : lineRange.to) * 8
+    ).toString(16).length;
+
+    if (lastLineNumberLabelLength < 2) {
+      lastLineNumberLabelLength = 2;
+    }
+  }
+
+  var linesWithLineNumbers = reduce(
+    function(acc, lineSource, index) {
+      var isLineWithError = index === lineWithErrorCurrentIndex;
+      var prefix = isLineWithError ? "> " : defaultLinePrefix;
+      var lineNumberLabel;
+
+      if (isBuffer(input)) {
+        lineNumberLabel = leftPad(
+          ((lineRange.from + index) * 8).toString(16),
+          lastLineNumberLabelLength,
+          "0"
+        );
+      } else {
+        lineNumberLabel = leftPad(
+          (lineRange.from + index + 1).toString(),
+          lastLineNumberLabelLength,
+          " "
+        );
+      }
+
+      return [].concat(
+        acc,
+        [prefix + lineNumberLabel + " | " + lineSource],
+        isLineWithError
+          ? [
+              defaultLinePrefix +
+                repeat(" ", lastLineNumberLabelLength) +
+                " | " +
+                leftPad("", column, " ") +
+                repeat("^", verticalMarkerLength)
+            ]
+          : []
+      );
+    },
+    [],
+    lines
+  );
+
+  return linesWithLineNumbers.join("\n");
+}
+
+function formatError(input, error) {
+  return [
+    "\n",
+    "-- PARSING FAILED " + repeat("-", 50),
+    "\n\n",
+    formatGot(input, error),
+    "\n\n",
+    formatExpected(error.expected),
+    "\n"
+  ].join("");
+}
+
+function flags(re) {
+  var s = "" + re;
+  return s.slice(s.lastIndexOf("/") + 1);
+}
+
+function anchoredRegexp(re) {
+  return RegExp("^(?:" + re.source + ")", flags(re));
+}
+
+// -*- Combinators -*-
+
+function seq() {
+  var parsers = [].slice.call(arguments);
+  var numParsers = parsers.length;
+  for (var j = 0; j < numParsers; j += 1) {
+    assertParser(parsers[j]);
+  }
+  return Parsimmon(function(input, i) {
+    var result;
+    var accum = new Array(numParsers);
+    for (var j = 0; j < numParsers; j += 1) {
+      result = mergeReplies(parsers[j]._(input, i), result);
+      if (!result.status) {
+        return result;
+      }
+      accum[j] = result.value;
+      i = result.index;
+    }
+    return mergeReplies(makeSuccess(i, accum), result);
+  });
+}
+
+function seqObj() {
+  var seenKeys = {};
+  var totalKeys = 0;
+  var parsers = toArray(arguments);
+  var numParsers = parsers.length;
+  for (var j = 0; j < numParsers; j += 1) {
+    var p = parsers[j];
+    if (isParser(p)) {
+      continue;
+    }
+    if (isArray(p)) {
+      var isWellFormed =
+        p.length === 2 && typeof p[0] === "string" && isParser(p[1]);
+      if (isWellFormed) {
+        var key = p[0];
+        if (Object.prototype.hasOwnProperty.call(seenKeys, key)) {
+          throw new Error("seqObj: duplicate key " + key);
+        }
+        seenKeys[key] = true;
+        totalKeys++;
+        continue;
+      }
+    }
+    throw new Error(
+      "seqObj arguments must be parsers or [string, parser] array pairs."
+    );
+  }
+  if (totalKeys === 0) {
+    throw new Error("seqObj expects at least one named parser, found zero");
+  }
+  return Parsimmon(function(input, i) {
+    var result;
+    var accum = {};
+    for (var j = 0; j < numParsers; j += 1) {
+      var name;
+      var parser;
+      if (isArray(parsers[j])) {
+        name = parsers[j][0];
+        parser = parsers[j][1];
+      } else {
+        name = null;
+        parser = parsers[j];
+      }
+      result = mergeReplies(parser._(input, i), result);
+      if (!result.status) {
+        return result;
+      }
+      if (name) {
+        accum[name] = result.value;
+      }
+      i = result.index;
+    }
+    return mergeReplies(makeSuccess(i, accum), result);
+  });
+}
+
+function seqMap() {
+  var args = [].slice.call(arguments);
+  if (args.length === 0) {
+    throw new Error("seqMap needs at least one argument");
+  }
+  var mapper = args.pop();
+  assertFunction(mapper);
+  return seq.apply(null, args).map(function(results) {
+    return mapper.apply(null, results);
+  });
+}
+
+// TODO[ES5]: Revisit this with Object.keys and .bind.
+function createLanguage(parsers) {
+  var language = {};
+  for (var key in parsers) {
+    if ({}.hasOwnProperty.call(parsers, key)) {
+      (function(key) {
+        var func = function() {
+          return parsers[key](language);
+        };
+        language[key] = lazy(func);
+      })(key);
+    }
+  }
+  return language;
+}
+
+function alt() {
+  var parsers = [].slice.call(arguments);
+  var numParsers = parsers.length;
+  if (numParsers === 0) {
+    return fail("zero alternates");
+  }
+  for (var j = 0; j < numParsers; j += 1) {
+    assertParser(parsers[j]);
+  }
+  return Parsimmon(function(input, i) {
+    var result;
+    for (var j = 0; j < parsers.length; j += 1) {
+      result = mergeReplies(parsers[j]._(input, i), result);
+      if (result.status) {
+        return result;
+      }
+    }
+    return result;
+  });
+}
+
+function sepBy(parser, separator) {
+  // Argument asserted by sepBy1
+  return sepBy1(parser, separator).or(succeed([]));
+}
+
+function sepBy1(parser, separator) {
+  assertParser(parser);
+  assertParser(separator);
+  var pairs = separator.then(parser).many();
+  return seqMap(parser, pairs, function(r, rs) {
+    return [r].concat(rs);
+  });
+}
+
+// -*- Core Parsing Methods -*-
+
+_.parse = function(input) {
+  if (typeof input !== "string" && !isBuffer(input)) {
+    throw new Error(
+      ".parse must be called with a string or Buffer as its argument"
+    );
+  }
+  var result = this.skip(eof)._(input, 0);
+  if (result.status) {
+    return {
+      status: true,
+      value: result.value
+    };
+  }
+  return {
+    status: false,
+    index: makeLineColumnIndex(input, result.furthest),
+    expected: result.expected
+  };
+};
+
+// -*- Other Methods -*-
+
+_.tryParse = function(str) {
+  var result = this.parse(str);
+  if (result.status) {
+    return result.value;
+  } else {
+    var msg = formatError(str, result);
+    var err = new Error(msg);
+    err.type = "ParsimmonError";
+    err.result = result;
+    throw err;
+  }
+};
+
+_.assert = function(condition, errorMessage) {
+  return this.chain(function(value) {
+    return condition(value) ? succeed(value) : fail(errorMessage);
+  });
+};
+
+_.or = function(alternative) {
+  return alt(this, alternative);
+};
+
+_.trim = function(parser) {
+  return this.wrap(parser, parser);
+};
+
+_.wrap = function(leftParser, rightParser) {
+  return seqMap(leftParser, this, rightParser, function(left, middle) {
+    return middle;
+  });
+};
+
+_.thru = function(wrapper) {
+  return wrapper(this);
+};
+
+_.then = function(next) {
+  assertParser(next);
+  return seq(this, next).map(function(results) {
+    return results[1];
+  });
+};
+
+_.many = function() {
+  var self = this;
+
+  return Parsimmon(function(input, i) {
+    var accum = [];
+    var result = undefined;
+
+    for (;;) {
+      result = mergeReplies(self._(input, i), result);
+      if (result.status) {
+        if (i === result.index) {
+          throw new Error(
+            "infinite loop detected in .many() parser --- calling .many() on " +
+              "a parser which can accept zero characters is usually the cause"
+          );
+        }
+        i = result.index;
+        accum.push(result.value);
+      } else {
+        return mergeReplies(makeSuccess(i, accum), result);
+      }
+    }
+  });
+};
+
+_.tieWith = function(separator) {
+  assertString(separator);
+  return this.map(function(args) {
+    assertArray(args);
+    if (args.length) {
+      assertString(args[0]);
+      var s = args[0];
+      for (var i = 1; i < args.length; i++) {
+        assertString(args[i]);
+        s += separator + args[i];
+      }
+      return s;
+    } else {
+      return "";
+    }
+  });
+};
+
+_.tie = function() {
+  return this.tieWith("");
+};
+
+_.times = function(min, max) {
+  var self = this;
+  if (arguments.length < 2) {
+    max = min;
+  }
+  assertNumber(min);
+  assertNumber(max);
+  return Parsimmon(function(input, i) {
+    var accum = [];
+    var result = undefined;
+    var prevResult = undefined;
+    for (var times = 0; times < min; times += 1) {
+      result = self._(input, i);
+      prevResult = mergeReplies(result, prevResult);
+      if (result.status) {
+        i = result.index;
+        accum.push(result.value);
+      } else {
+        return prevResult;
+      }
+    }
+    for (; times < max; times += 1) {
+      result = self._(input, i);
+      prevResult = mergeReplies(result, prevResult);
+      if (result.status) {
+        i = result.index;
+        accum.push(result.value);
+      } else {
+        break;
+      }
+    }
+    return mergeReplies(makeSuccess(i, accum), prevResult);
+  });
+};
+
+_.result = function(res) {
+  return this.map(function() {
+    return res;
+  });
+};
+
+_.atMost = function(n) {
+  return this.times(0, n);
+};
+
+_.atLeast = function(n) {
+  return seqMap(this.times(n), this.many(), function(init, rest) {
+    return init.concat(rest);
+  });
+};
+
+_.map = function(fn) {
+  assertFunction(fn);
+  var self = this;
+  return Parsimmon(function(input, i) {
+    var result = self._(input, i);
+    if (!result.status) {
+      return result;
+    }
+    return mergeReplies(makeSuccess(result.index, fn(result.value)), result);
+  });
+};
+
+_.contramap = function(fn) {
+  assertFunction(fn);
+  var self = this;
+  return Parsimmon(function(input, i) {
+    var result = self.parse(fn(input.slice(i)));
+    if (!result.status) {
+      return result;
+    }
+    return makeSuccess(i + input.length, result.value);
+  });
+};
+
+_.promap = function(f, g) {
+  assertFunction(f);
+  assertFunction(g);
+  return this.contramap(f).map(g);
+};
+
+_.skip = function(next) {
+  return seq(this, next).map(function(results) {
+    return results[0];
+  });
+};
+
+_.mark = function() {
+  return seqMap(index, this, index, function(start, value, end) {
+    return {
+      start: start,
+      value: value,
+      end: end
+    };
+  });
+};
+
+_.node = function(name) {
+  return seqMap(index, this, index, function(start, value, end) {
+    return {
+      name: name,
+      value: value,
+      start: start,
+      end: end
+    };
+  });
+};
+
+_.sepBy = function(separator) {
+  return sepBy(this, separator);
+};
+
+_.sepBy1 = function(separator) {
+  return sepBy1(this, separator);
+};
+
+_.lookahead = function(x) {
+  return this.skip(lookahead(x));
+};
+
+_.notFollowedBy = function(x) {
+  return this.skip(notFollowedBy(x));
+};
+
+_.desc = function(expected) {
+  if (!isArray(expected)) {
+    expected = [expected];
+  }
+  var self = this;
+  return Parsimmon(function(input, i) {
+    var reply = self._(input, i);
+    if (!reply.status) {
+      reply.expected = expected;
+    }
+    return reply;
+  });
+};
+
+_.fallback = function(result) {
+  return this.or(succeed(result));
+};
+
+_.ap = function(other) {
+  return seqMap(other, this, function(f, x) {
+    return f(x);
+  });
+};
+
+_.chain = function(f) {
+  var self = this;
+  return Parsimmon(function(input, i) {
+    var result = self._(input, i);
+    if (!result.status) {
+      return result;
+    }
+    var nextParser = f(result.value);
+    return mergeReplies(nextParser._(input, result.index), result);
+  });
+};
+
+// -*- Constructors -*-
+
+function string(str) {
+  assertString(str);
+  var expected = "'" + str + "'";
+  return Parsimmon(function(input, i) {
+    var j = i + str.length;
+    var head = input.slice(i, j);
+    if (head === str) {
+      return makeSuccess(j, head);
+    } else {
+      return makeFailure(i, expected);
+    }
+  });
+}
+
+function byte(b) {
+  ensureBuffer();
+  assertNumber(b);
+  if (b > 0xff) {
+    throw new Error(
+      "Value specified to byte constructor (" +
+        b +
+        "=0x" +
+        b.toString(16) +
+        ") is larger in value than a single byte."
+    );
+  }
+  var expected = (b > 0xf ? "0x" : "0x0") + b.toString(16);
+  return Parsimmon(function(input, i) {
+    var head = get(input, i);
+    if (head === b) {
+      return makeSuccess(i + 1, head);
+    } else {
+      return makeFailure(i, expected);
+    }
+  });
+}
+
+function regexp(re, group) {
+  assertRegexp(re);
+  if (arguments.length >= 2) {
+    assertNumber(group);
+  } else {
+    group = 0;
+  }
+  var anchored = anchoredRegexp(re);
+  var expected = "" + re;
+  return Parsimmon(function(input, i) {
+    var match = anchored.exec(input.slice(i));
+    if (match) {
+      if (0 <= group && group <= match.length) {
+        var fullMatch = match[0];
+        var groupMatch = match[group];
+        return makeSuccess(i + fullMatch.length, groupMatch);
+      }
+      var message =
+        "valid match group (0 to " + match.length + ") in " + expected;
+      return makeFailure(i, message);
+    }
+    return makeFailure(i, expected);
+  });
+}
+
+function succeed(value) {
+  return Parsimmon(function(input, i) {
+    return makeSuccess(i, value);
+  });
+}
+
+function fail(expected) {
+  return Parsimmon(function(input, i) {
+    return makeFailure(i, expected);
+  });
+}
+
+function lookahead(x) {
+  if (isParser(x)) {
+    return Parsimmon(function(input, i) {
+      var result = x._(input, i);
+      result.index = i;
+      result.value = "";
+      return result;
+    });
+  } else if (typeof x === "string") {
+    return lookahead(string(x));
+  } else if (x instanceof RegExp) {
+    return lookahead(regexp(x));
+  }
+  throw new Error("not a string, regexp, or parser: " + x);
+}
+
+function notFollowedBy(parser) {
+  assertParser(parser);
+  return Parsimmon(function(input, i) {
+    var result = parser._(input, i);
+    var text = input.slice(i, result.index);
+    return result.status
+      ? makeFailure(i, 'not "' + text + '"')
+      : makeSuccess(i, null);
+  });
+}
+
+function test(predicate) {
+  assertFunction(predicate);
+  return Parsimmon(function(input, i) {
+    var char = get(input, i);
+    if (i < input.length && predicate(char)) {
+      return makeSuccess(i + 1, char);
+    } else {
+      return makeFailure(i, "a character/byte matching " + predicate);
+    }
+  });
+}
+
+function oneOf(str) {
+  var expected = str.split("");
+  for (var idx = 0; idx < expected.length; idx++) {
+    expected[idx] = "'" + expected[idx] + "'";
+  }
+  return test(function(ch) {
+    return str.indexOf(ch) >= 0;
+  }).desc(expected);
+}
+
+function noneOf(str) {
+  return test(function(ch) {
+    return str.indexOf(ch) < 0;
+  }).desc("none of '" + str + "'");
+}
+
+function custom(parsingFunction) {
+  return Parsimmon(parsingFunction(makeSuccess, makeFailure));
+}
+
+// TODO[ES5]: Improve error message using JSON.stringify eventually.
+function range(begin, end) {
+  return test(function(ch) {
+    return begin <= ch && ch <= end;
+  }).desc(begin + "-" + end);
+}
+
+function takeWhile(predicate) {
+  assertFunction(predicate);
+
+  return Parsimmon(function(input, i) {
+    var j = i;
+    while (j < input.length && predicate(get(input, j))) {
+      j++;
+    }
+    return makeSuccess(j, input.slice(i, j));
+  });
+}
+
+function lazy(desc, f) {
+  if (arguments.length < 2) {
+    f = desc;
+    desc = undefined;
+  }
+
+  var parser = Parsimmon(function(input, i) {
+    parser._ = f()._;
+    return parser._(input, i);
+  });
+
+  if (desc) {
+    return parser.desc(desc);
+  } else {
+    return parser;
+  }
+}
+
+// -*- Fantasy Land Extras -*-
+
+function empty() {
+  return fail("fantasy-land/empty");
+}
+
+_.concat = _.or;
+_.empty = empty;
+_.of = succeed;
+_["fantasy-land/ap"] = _.ap;
+_["fantasy-land/chain"] = _.chain;
+_["fantasy-land/concat"] = _.concat;
+_["fantasy-land/empty"] = _.empty;
+_["fantasy-land/of"] = _.of;
+_["fantasy-land/map"] = _.map;
+
+// -*- Base Parsers -*-
+
+var index = Parsimmon(function(input, i) {
+  return makeSuccess(i, makeLineColumnIndex(input, i));
+});
+
+var any = Parsimmon(function(input, i) {
+  if (i >= input.length) {
+    return makeFailure(i, "any character/byte");
+  }
+  return makeSuccess(i + 1, get(input, i));
+});
+
+var all = Parsimmon(function(input, i) {
+  return makeSuccess(input.length, input.slice(i));
+});
+
+var eof = Parsimmon(function(input, i) {
+  if (i < input.length) {
+    return makeFailure(i, "EOF");
+  }
+  return makeSuccess(i, null);
+});
+
+var digit = regexp(/[0-9]/).desc("a digit");
+var digits = regexp(/[0-9]*/).desc("optional digits");
+var letter = regexp(/[a-z]/i).desc("a letter");
+var letters = regexp(/[a-z]*/i).desc("optional letters");
+var optWhitespace = regexp(/\s*/).desc("optional whitespace");
+var whitespace = regexp(/\s+/).desc("whitespace");
+var cr = string("\r");
+var lf = string("\n");
+var crlf = string("\r\n");
+var newline = alt(crlf, lf, cr).desc("newline");
+var end = alt(newline, eof);
+
+Parsimmon.all = all;
+Parsimmon.alt = alt;
+Parsimmon.any = any;
+Parsimmon.cr = cr;
+Parsimmon.createLanguage = createLanguage;
+Parsimmon.crlf = crlf;
+Parsimmon.custom = custom;
+Parsimmon.digit = digit;
+Parsimmon.digits = digits;
+Parsimmon.empty = empty;
+Parsimmon.end = end;
+Parsimmon.eof = eof;
+Parsimmon.fail = fail;
+Parsimmon.formatError = formatError;
+Parsimmon.index = index;
+Parsimmon.isParser = isParser;
+Parsimmon.lazy = lazy;
+Parsimmon.letter = letter;
+Parsimmon.letters = letters;
+Parsimmon.lf = lf;
+Parsimmon.lookahead = lookahead;
+Parsimmon.makeFailure = makeFailure;
+Parsimmon.makeSuccess = makeSuccess;
+Parsimmon.newline = newline;
+Parsimmon.noneOf = noneOf;
+Parsimmon.notFollowedBy = notFollowedBy;
+Parsimmon.of = succeed;
+Parsimmon.oneOf = oneOf;
+Parsimmon.optWhitespace = optWhitespace;
+Parsimmon.Parser = Parsimmon;
+Parsimmon.range = range;
+Parsimmon.regex = regexp;
+Parsimmon.regexp = regexp;
+Parsimmon.sepBy = sepBy;
+Parsimmon.sepBy1 = sepBy1;
+Parsimmon.seq = seq;
+Parsimmon.seqMap = seqMap;
+Parsimmon.seqObj = seqObj;
+Parsimmon.string = string;
+Parsimmon.succeed = succeed;
+Parsimmon.takeWhile = takeWhile;
+Parsimmon.test = test;
+Parsimmon.whitespace = whitespace;
+Parsimmon["fantasy-land/empty"] = empty;
+Parsimmon["fantasy-land/of"] = succeed;
+
+Parsimmon.Binary = {
+  bitSeq: bitSeq,
+  bitSeqObj: bitSeqObj,
+  byte: byte,
+  buffer: parseBuffer,
+  encodedString: encodedString,
+  uintBE: uintBE,
+  uint8BE: uintBE(1),
+  uint16BE: uintBE(2),
+  uint32BE: uintBE(4),
+  uintLE: uintLE,
+  uint8LE: uintLE(1),
+  uint16LE: uintLE(2),
+  uint32LE: uintLE(4),
+  intBE: intBE,
+  int8BE: intBE(1),
+  int16BE: intBE(2),
+  int32BE: intBE(4),
+  intLE: intLE,
+  int8LE: intLE(1),
+  int16LE: intLE(2),
+  int32LE: intLE(4),
+  floatBE: floatBE(),
+  floatLE: floatLE(),
+  doubleBE: doubleBE(),
+  doubleLE: doubleLE()
+};
+
+module.exports = Parsimmon;
+
+
+/***/ }),
 /* 271 */,
 /* 272 */,
 /* 273 */,
@@ -24988,6 +26362,20 @@ const handleDeploy = async (context, version, environment, payload, commands) =>
         throw e;
     }
 };
+const releaseDeployAndVerify = (context, version, environment, ref) => {
+    return handleDeploy(context, version, environment, { pr: context.issue().number }, [
+        "echo ::group::Release",
+        `export RELEASE_BRANCH=${ref}`,
+        config_1.config.releaseCommand,
+        "echo ::endgroup::",
+        "echo ::group::Deploy",
+        config_1.config.deployCommand,
+        "echo ::endgroup::",
+        "echo ::group::Verify",
+        config_1.config.verifyCommand,
+        "echo ::endgroup::",
+    ]);
+};
 // If the PR was deployed to pre-production, then deploy it to production
 const handlePrMerged = async (context, pr) => {
     const { productionEnvironment, preProductionEnvironment } = config_1.config;
@@ -25012,10 +26400,17 @@ const handlePrMerged = async (context, pr) => {
     logging_1.debug(`${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`);
     try {
         const version = await git_1.getShortSha(deployment.sha);
-        const output = await handleDeploy(context, version, productionEnvironment, { pr: pr.number }, [config_1.config.deployCommand]);
+        const output = await handleDeploy(context, version, productionEnvironment, { pr: pr.number }, [
+            "echo ::group::Deploy",
+            config_1.config.deployCommand,
+            "echo ::endgroup::",
+            "echo ::group::Verify",
+            config_1.config.verifyCommand,
+            "echo ::endgroup::",
+        ]);
         const body = [
             comment.mention(`deployed ${version} to ${productionEnvironment} (${comment.runLink("Details")})`),
-            comment.details("Output", comment.codeBlock(output)),
+            comment.logToDetails(output),
         ];
         await utils_1.createComment(context, pr.number, body);
     }
@@ -25028,29 +26423,28 @@ const handleQA = async (context, pr) => {
     const deployment = await utils_1.findDeployment(context, environment);
     if (utils_1.environmentIsAvailable(context, deployment)) {
         try {
-            const { ref } = pr.head;
             await git_1.checkoutPullRequest(pr);
             try {
                 await git_1.updatePullRequest(pr);
             }
             catch (e) {
-                await utils_1.handleError(context, pr.number, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`, e);
+                await utils_1.handleError(context, context.issue().number, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`, e);
                 return;
             }
             const version = await git_1.getShortSha("HEAD");
-            const output = await handleDeploy(context, version, environment, { pr: pr.number }, [
-                `export RELEASE_BRANCH=${ref}`,
-                config_1.config.releaseCommand,
-                config_1.config.deployCommand,
-            ]);
+            const { ref } = pr.head;
+            const output = await releaseDeployAndVerify(context, version, environment, ref);
             const body = [
                 comment.mention(`deployed ${version} to ${environment} (${comment.runLink("Details")})`),
-                comment.details("Output", comment.codeBlock(output)),
+                comment.logToDetails(output),
             ];
             await utils_1.createComment(context, pr.number, body);
         }
         catch (e) {
-            await utils_1.handleError(context, pr.number, `release and deploy to ${environment} failed`, e);
+            await Promise.all([
+                utils_1.handleError(context, context.issue().number, `release and deploy to ${environment} failed`, e),
+                utils_1.setCommitStatus(context, pr, "failure"),
+            ]);
         }
     }
     else {
@@ -25118,10 +26512,10 @@ const resetPreProductionDeployment = async (context) => {
         return;
     }
     const version = await git_1.getShortSha(prodDeployment.sha);
-    const output = await handleDeploy(context, version, preProductionEnvironment, { pr: context.issue().number }, [config_1.config.deployCommand]);
+    const output = await handleDeploy(context, version, preProductionEnvironment, { pr: context.issue().number }, ["echo ::group::Deploy", config_1.config.deployCommand, "echo ::endgroup::"]);
     const body = [
         `Reset ${preProductionEnvironment} to version ${version} from ${productionEnvironment} (${comment.runLink("Details")}).`,
-        comment.details("Output", comment.codeBlock(output)),
+        comment.logToDetails(output),
     ];
     await utils_1.createComment(context, prNumber, body);
 };
@@ -25156,6 +26550,11 @@ const updateOutdatedDeployment = async (context, pr) => {
         handleQA(context, deployedPr),
     ]);
 };
+const commentPullRequestNotDeployed = (context) => {
+    return utils_1.createComment(context, context.issue().number, [
+        `This pull request has not been deployed yet. You can use ${comment.code("/qa")} to deploy it to ${config_1.config.preProductionEnvironment} or ${comment.code("/skip-qa")} to not deploy this pull request.`,
+    ]);
+};
 const probot = (app) => {
     // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
     // https://help.github.com/en/actions/reference/events-that-trigger-workflows
@@ -25186,6 +26585,24 @@ const probot = (app) => {
                     utils_1.setCommitStatus(context, pr.data, "pending"),
                     handleQA(context, pr.data),
                 ]);
+                break;
+            }
+            case utils_1.commandMatches(context, "failed-qa"): {
+                if (utils_1.pullRequestHasBeenDeployed(context, pr.data.number)) {
+                    await utils_1.setCommitStatus(context, pr.data, "failure");
+                }
+                else {
+                    await commentPullRequestNotDeployed(context);
+                }
+                break;
+            }
+            case utils_1.commandMatches(context, "passed-qa"): {
+                if (utils_1.pullRequestHasBeenDeployed(context, pr.data.number)) {
+                    await utils_1.setCommitStatus(context, pr.data, "success");
+                }
+                else {
+                    await commentPullRequestNotDeployed(context);
+                }
                 break;
             }
             default: {
@@ -32169,7 +33586,7 @@ var fs = __webpack_require__(747);
 var url = __webpack_require__(835);
 var transports = __webpack_require__(934);
 var path = __webpack_require__(622);
-var lsmod = __webpack_require__(202);
+var lsmod = __webpack_require__(656);
 var stacktrace = __webpack_require__(223);
 var stringify = __webpack_require__(21);
 
@@ -35981,6 +37398,20 @@ exports.findDeployment = async (context, environment) => {
         return undefined;
     }
 };
+exports.findLastDeploymentForPullRequest = async (context, prNumber) => {
+    const commits = await context.github.pulls.listCommits(context.repo({ pull_number: prNumber }));
+    for (let i = commits.data.length - 1; i >= 0; i--) {
+        const { sha } = commits.data[i];
+        const deployments = await context.github.repos.listDeployments(context.repo({ sha }));
+        if (deployments.data.length > 0) {
+            return deployments.data[0];
+        }
+    }
+    return undefined;
+};
+exports.pullRequestHasBeenDeployed = async (context, prNumber) => {
+    return ((await exports.findLastDeploymentForPullRequest(context, prNumber)) !== undefined);
+};
 exports.setDeploymentStatus = (context, deploymentId, state) => context.github.repos.createDeploymentStatus(context.repo({ deployment_id: deploymentId, state }));
 exports.createDeployment = (context, ref, environment, payload) => context.github.repos.createDeployment(context.repo({
     task: "deploy",
@@ -36018,7 +37449,7 @@ exports.handleError = async (context, issueNumber, text, e) => {
     const message = `${text}: ${comment.code(errorMessage(e))}`;
     const body = [comment.mention(`${message} (${comment.runLink("Details")})`)];
     if (e instanceof shell_1.ShellError) {
-        body.push(comment.details("Output", comment.codeBlock(e.output)));
+        body.push(comment.logToDetails(e.output));
     }
     await exports.createComment(context, issueNumber, body);
     logging_1.error(message);
@@ -46392,9 +47823,48 @@ module.exports = styles;
 /***/ }),
 /* 495 */,
 /* 496 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
 
-module.exports = require(__webpack_require__.ab + "src/build/Release/DTraceProviderBindings.node")
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+Object.defineProperty(exports, "v1", {
+  enumerable: true,
+  get: function () {
+    return _v.default;
+  }
+});
+Object.defineProperty(exports, "v3", {
+  enumerable: true,
+  get: function () {
+    return _v2.default;
+  }
+});
+Object.defineProperty(exports, "v4", {
+  enumerable: true,
+  get: function () {
+    return _v3.default;
+  }
+});
+Object.defineProperty(exports, "v5", {
+  enumerable: true,
+  get: function () {
+    return _v4.default;
+  }
+});
+
+var _v = _interopRequireDefault(__webpack_require__(765));
+
+var _v2 = _interopRequireDefault(__webpack_require__(161));
+
+var _v3 = _interopRequireDefault(__webpack_require__(703));
+
+var _v4 = _interopRequireDefault(__webpack_require__(935));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 /***/ }),
 /* 497 */
@@ -46949,12 +48419,8 @@ module.exports = function (jwtString, secretOrPublicKey, options, callback) {
 /* 506 */,
 /* 507 */,
 /* 508 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
+/***/ (function(__unusedmodule, exports) {
 
-function __ncc_wildcard$0 (arg) {
-  if (arg === "Release") return __webpack_require__(496);
-  else if (arg === "Release/obj.target") return __webpack_require__(998);
-}
 var DTraceProvider;
 
 function DTraceProviderStub() {}
@@ -46972,7 +48438,7 @@ var err = null;
 
 for (var i = 0; i < builds.length; i++) {
     try {
-        var binding = __ncc_wildcard$0(builds[i]);
+        var binding = require('./src/build/' + builds[i] + '/DTraceProviderBindings');
         DTraceProvider = binding.DTraceProvider;
         break;
     } catch (e) {
@@ -53292,7 +54758,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // Copyright (c) Christian Tellnes <christian@tellnes.no>
 // tslint:disable
 var wrap_logger_1 = __webpack_require__(154);
-var uuid_1 = __webpack_require__(656);
+var uuid_1 = __webpack_require__(496);
 exports.logRequest = function (_a) {
     var logger = _a.logger;
     return function (req, res, next) {
@@ -57222,6 +58688,7 @@ exports.config = {
     preProductionEnvironment: input("pre-production-environment"),
     deployCommand: input("deploy"),
     releaseCommand: input("release"),
+    verifyCommand: input("verify"),
 };
 
 
@@ -70986,48 +72453,78 @@ if (process.platform === 'linux') {
 /***/ }),
 /* 655 */,
 /* 656 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
+/***/ (function(module, __unusedexports, __webpack_require__) {
 
 "use strict";
 
 
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-Object.defineProperty(exports, "v1", {
-  enumerable: true,
-  get: function () {
-    return _v.default;
-  }
-});
-Object.defineProperty(exports, "v3", {
-  enumerable: true,
-  get: function () {
-    return _v2.default;
-  }
-});
-Object.defineProperty(exports, "v4", {
-  enumerable: true,
-  get: function () {
-    return _v3.default;
-  }
-});
-Object.defineProperty(exports, "v5", {
-  enumerable: true,
-  get: function () {
-    return _v4.default;
-  }
-});
+// Original repository: https://github.com/defunctzombie/node-lsmod/
+//
+// [2018-02-09] @kamilogorek - Handle scoped packages structure
 
-var _v = _interopRequireDefault(__webpack_require__(765));
+// builtin
+var fs = __webpack_require__(747);
+var path = __webpack_require__(622);
 
-var _v2 = _interopRequireDefault(__webpack_require__(161));
+// node 0.6 support
+fs.existsSync = fs.existsSync || path.existsSync;
 
-var _v3 = _interopRequireDefault(__webpack_require__(703));
+// mainPaths are the paths where our mainprog will be able to load from
+// we store these to avoid grabbing the modules that were loaded as a result
+// of a dependency module loading its dependencies, we only care about deps our
+// mainprog loads
+var mainPaths = (require.main && require.main.paths) || [];
 
-var _v4 = _interopRequireDefault(__webpack_require__(935));
+module.exports = function() {
+  var paths = Object.keys(require.cache || []);
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+  // module information
+  var infos = {};
+
+  // paths we have already inspected to avoid traversing again
+  var seen = {};
+
+  paths.forEach(function(p) {
+    /* eslint-disable consistent-return */
+
+    var dir = p;
+
+    (function updir() {
+      var orig = dir;
+      dir = path.dirname(orig);
+
+      if (/@[^/]+$/.test(dir)) {
+        dir = path.dirname(dir);
+      }
+
+      if (!dir || orig === dir || seen[orig]) {
+        return;
+      } else if (mainPaths.indexOf(dir) < 0) {
+        return updir();
+      }
+
+      var pkgfile = path.join(orig, 'package.json');
+      var exists = fs.existsSync(pkgfile);
+
+      seen[orig] = true;
+
+      // travel up the tree if no package.json here
+      if (!exists) {
+        return updir();
+      }
+
+      try {
+        var info = JSON.parse(fs.readFileSync(pkgfile, 'utf8'));
+        infos[info.name] = info.version;
+      } catch (e) {}
+    })();
+
+    /* eslint-enable consistent-return */
+  });
+
+  return infos;
+};
+
 
 /***/ }),
 /* 657 */,
@@ -80224,8 +81721,15 @@ exports.shell = async (commands, extraEnv = {}) => {
     return new Promise((resolve, reject) => {
         const env = Object.assign(Object.assign({}, process.env), extraEnv);
         const options = { env, cwd: process.cwd() };
+        const commandsWithTracing = commands.reduce((acc, command) => {
+            if (!command.startsWith("echo")) {
+                acc.push(`echo ${command}`);
+            }
+            acc.push(command);
+            return acc;
+        }, []);
         // TODO shell escape command
-        const child = child_process_1.spawn("bash", ["-e", "-x", "-c", commands.join("\n")], options);
+        const child = child_process_1.spawn("bash", ["-e", "-c", commandsWithTracing.join("\n")], options);
         child.stdout.on("data", (data) => {
             const str = data.toString();
             output.push(str);
@@ -86936,7 +88440,7 @@ module.exports = (...handlers) => {
 /* 876 */
 /***/ (function(module) {
 
-module.exports = {"_args":[["@octokit/rest@16.43.1","/Users/emilymears/_dev/actions-deploy"]],"_from":"@octokit/rest@16.43.1","_id":"@octokit/rest@16.43.1","_inBundle":false,"_integrity":"sha512-gfFKwRT/wFxq5qlNjnW2dh+qh74XgTQ2B179UX5K1HYCluioWj8Ndbgqw2PVqa1NnVJkGHp2ovMpVn/DImlmkw==","_location":"/probot/@octokit/rest","_phantomChildren":{},"_requested":{"type":"version","registry":true,"raw":"@octokit/rest@16.43.1","name":"@octokit/rest","escapedName":"@octokit%2frest","scope":"@octokit","rawSpec":"16.43.1","saveSpec":null,"fetchSpec":"16.43.1"},"_requiredBy":["/probot"],"_resolved":"https://registry.npmjs.org/@octokit/rest/-/rest-16.43.1.tgz","_spec":"16.43.1","_where":"/Users/emilymears/_dev/actions-deploy","author":{"name":"Gregor Martynus","url":"https://github.com/gr2m"},"bugs":{"url":"https://github.com/octokit/rest.js/issues"},"bundlesize":[{"path":"./dist/octokit-rest.min.js.gz","maxSize":"33 kB"}],"contributors":[{"name":"Mike de Boer","email":"info@mikedeboer.nl"},{"name":"Fabian Jakobs","email":"fabian@c9.io"},{"name":"Joe Gallo","email":"joe@brassafrax.com"},{"name":"Gregor Martynus","url":"https://github.com/gr2m"}],"dependencies":{"@octokit/auth-token":"^2.4.0","@octokit/plugin-paginate-rest":"^1.1.1","@octokit/plugin-request-log":"^1.0.0","@octokit/plugin-rest-endpoint-methods":"2.4.0","@octokit/request":"^5.2.0","@octokit/request-error":"^1.0.2","atob-lite":"^2.0.0","before-after-hook":"^2.0.0","btoa-lite":"^1.0.0","deprecation":"^2.0.0","lodash.get":"^4.4.2","lodash.set":"^4.3.2","lodash.uniq":"^4.5.0","octokit-pagination-methods":"^1.1.0","once":"^1.4.0","universal-user-agent":"^4.0.0"},"description":"GitHub REST API client for Node.js","devDependencies":{"@gimenete/type-writer":"^0.1.3","@octokit/auth":"^1.1.1","@octokit/fixtures-server":"^5.0.6","@octokit/graphql":"^4.2.0","@types/node":"^13.1.0","bundlesize":"^0.18.0","chai":"^4.1.2","compression-webpack-plugin":"^3.1.0","cypress":"^3.0.0","glob":"^7.1.2","http-proxy-agent":"^4.0.0","lodash.camelcase":"^4.3.0","lodash.merge":"^4.6.1","lodash.upperfirst":"^4.3.1","lolex":"^5.1.2","mkdirp":"^1.0.0","mocha":"^7.0.1","mustache":"^4.0.0","nock":"^11.3.3","npm-run-all":"^4.1.2","nyc":"^15.0.0","prettier":"^1.14.2","proxy":"^1.0.0","semantic-release":"^17.0.0","sinon":"^8.0.0","sinon-chai":"^3.0.0","sort-keys":"^4.0.0","string-to-arraybuffer":"^1.0.0","string-to-jsdoc-comment":"^1.0.0","typescript":"^3.3.1","webpack":"^4.0.0","webpack-bundle-analyzer":"^3.0.0","webpack-cli":"^3.0.0"},"files":["index.js","index.d.ts","lib","plugins"],"homepage":"https://github.com/octokit/rest.js#readme","keywords":["octokit","github","rest","api-client"],"license":"MIT","name":"@octokit/rest","nyc":{"ignore":["test"]},"publishConfig":{"access":"public"},"release":{"publish":["@semantic-release/npm",{"path":"@semantic-release/github","assets":["dist/*","!dist/*.map.gz"]}]},"repository":{"type":"git","url":"git+https://github.com/octokit/rest.js.git"},"scripts":{"build":"npm-run-all build:*","build:browser":"npm-run-all build:browser:*","build:browser:development":"webpack --mode development --entry . --output-library=Octokit --output=./dist/octokit-rest.js --profile --json > dist/bundle-stats.json","build:browser:production":"webpack --mode production --entry . --plugin=compression-webpack-plugin --output-library=Octokit --output-path=./dist --output-filename=octokit-rest.min.js --devtool source-map","build:ts":"npm run -s update-endpoints:typescript","coverage":"nyc report --reporter=html && open coverage/index.html","generate-bundle-report":"webpack-bundle-analyzer dist/bundle-stats.json --mode=static --no-open --report dist/bundle-report.html","lint":"prettier --check '{lib,plugins,scripts,test}/**/*.{js,json,ts}' 'docs/*.{js,json}' 'docs/src/**/*' index.js README.md package.json","lint:fix":"prettier --write '{lib,plugins,scripts,test}/**/*.{js,json,ts}' 'docs/*.{js,json}' 'docs/src/**/*' index.js README.md package.json","postvalidate:ts":"tsc --noEmit --target es6 test/typescript-validate.ts","prebuild:browser":"mkdirp dist/","pretest":"npm run -s lint","prevalidate:ts":"npm run -s build:ts","start-fixtures-server":"octokit-fixtures-server","test":"nyc mocha test/mocha-node-setup.js \"test/*/**/*-test.js\"","test:browser":"cypress run --browser chrome","update-endpoints":"npm-run-all update-endpoints:*","update-endpoints:fetch-json":"node scripts/update-endpoints/fetch-json","update-endpoints:typescript":"node scripts/update-endpoints/typescript","validate:ts":"tsc --target es6 --noImplicitAny index.d.ts"},"types":"index.d.ts","version":"16.43.1"};
+module.exports = {"name":"@octokit/rest","version":"16.43.1","publishConfig":{"access":"public"},"description":"GitHub REST API client for Node.js","keywords":["octokit","github","rest","api-client"],"author":"Gregor Martynus (https://github.com/gr2m)","contributors":[{"name":"Mike de Boer","email":"info@mikedeboer.nl"},{"name":"Fabian Jakobs","email":"fabian@c9.io"},{"name":"Joe Gallo","email":"joe@brassafrax.com"},{"name":"Gregor Martynus","url":"https://github.com/gr2m"}],"repository":"https://github.com/octokit/rest.js","dependencies":{"@octokit/auth-token":"^2.4.0","@octokit/plugin-paginate-rest":"^1.1.1","@octokit/plugin-request-log":"^1.0.0","@octokit/plugin-rest-endpoint-methods":"2.4.0","@octokit/request":"^5.2.0","@octokit/request-error":"^1.0.2","atob-lite":"^2.0.0","before-after-hook":"^2.0.0","btoa-lite":"^1.0.0","deprecation":"^2.0.0","lodash.get":"^4.4.2","lodash.set":"^4.3.2","lodash.uniq":"^4.5.0","octokit-pagination-methods":"^1.1.0","once":"^1.4.0","universal-user-agent":"^4.0.0"},"devDependencies":{"@gimenete/type-writer":"^0.1.3","@octokit/auth":"^1.1.1","@octokit/fixtures-server":"^5.0.6","@octokit/graphql":"^4.2.0","@types/node":"^13.1.0","bundlesize":"^0.18.0","chai":"^4.1.2","compression-webpack-plugin":"^3.1.0","cypress":"^3.0.0","glob":"^7.1.2","http-proxy-agent":"^4.0.0","lodash.camelcase":"^4.3.0","lodash.merge":"^4.6.1","lodash.upperfirst":"^4.3.1","lolex":"^5.1.2","mkdirp":"^1.0.0","mocha":"^7.0.1","mustache":"^4.0.0","nock":"^11.3.3","npm-run-all":"^4.1.2","nyc":"^15.0.0","prettier":"^1.14.2","proxy":"^1.0.0","semantic-release":"^17.0.0","sinon":"^8.0.0","sinon-chai":"^3.0.0","sort-keys":"^4.0.0","string-to-arraybuffer":"^1.0.0","string-to-jsdoc-comment":"^1.0.0","typescript":"^3.3.1","webpack":"^4.0.0","webpack-bundle-analyzer":"^3.0.0","webpack-cli":"^3.0.0"},"types":"index.d.ts","scripts":{"coverage":"nyc report --reporter=html && open coverage/index.html","lint":"prettier --check '{lib,plugins,scripts,test}/**/*.{js,json,ts}' 'docs/*.{js,json}' 'docs/src/**/*' index.js README.md package.json","lint:fix":"prettier --write '{lib,plugins,scripts,test}/**/*.{js,json,ts}' 'docs/*.{js,json}' 'docs/src/**/*' index.js README.md package.json","pretest":"npm run -s lint","test":"nyc mocha test/mocha-node-setup.js \"test/*/**/*-test.js\"","test:browser":"cypress run --browser chrome","build":"npm-run-all build:*","build:ts":"npm run -s update-endpoints:typescript","prebuild:browser":"mkdirp dist/","build:browser":"npm-run-all build:browser:*","build:browser:development":"webpack --mode development --entry . --output-library=Octokit --output=./dist/octokit-rest.js --profile --json > dist/bundle-stats.json","build:browser:production":"webpack --mode production --entry . --plugin=compression-webpack-plugin --output-library=Octokit --output-path=./dist --output-filename=octokit-rest.min.js --devtool source-map","generate-bundle-report":"webpack-bundle-analyzer dist/bundle-stats.json --mode=static --no-open --report dist/bundle-report.html","update-endpoints":"npm-run-all update-endpoints:*","update-endpoints:fetch-json":"node scripts/update-endpoints/fetch-json","update-endpoints:typescript":"node scripts/update-endpoints/typescript","prevalidate:ts":"npm run -s build:ts","validate:ts":"tsc --target es6 --noImplicitAny index.d.ts","postvalidate:ts":"tsc --noEmit --target es6 test/typescript-validate.ts","start-fixtures-server":"octokit-fixtures-server"},"license":"MIT","files":["index.js","index.d.ts","lib","plugins"],"nyc":{"ignore":["test"]},"release":{"publish":["@semantic-release/npm",{"path":"@semantic-release/github","assets":["dist/*","!dist/*.map.gz"]}]},"bundlesize":[{"path":"./dist/octokit-rest.min.js.gz","maxSize":"33 kB"}],"_resolved":"https://registry.npmjs.org/@octokit/rest/-/rest-16.43.1.tgz","_integrity":"sha512-gfFKwRT/wFxq5qlNjnW2dh+qh74XgTQ2B179UX5K1HYCluioWj8Ndbgqw2PVqa1NnVJkGHp2ovMpVn/DImlmkw==","_from":"@octokit/rest@16.43.1"};
 
 /***/ }),
 /* 877 */
@@ -89929,7 +91433,7 @@ module.exports.safeCycles = safeCycles;
 /* 893 */
 /***/ (function(module) {
 
-module.exports = {"_args":[["raven@2.6.4","/Users/emilymears/_dev/actions-deploy"]],"_from":"raven@2.6.4","_id":"raven@2.6.4","_inBundle":false,"_integrity":"sha512-6PQdfC4+DQSFncowthLf+B6Hr0JpPsFBgTVYTAOq7tCmx/kR4SXbeawtPch20+3QfUcQDoJBLjWW1ybvZ4kXTw==","_location":"/raven","_phantomChildren":{},"_requested":{"type":"version","registry":true,"raw":"raven@2.6.4","name":"raven","escapedName":"raven","rawSpec":"2.6.4","saveSpec":null,"fetchSpec":"2.6.4"},"_requiredBy":["/probot"],"_resolved":"https://registry.npmjs.org/raven/-/raven-2.6.4.tgz","_spec":"2.6.4","_where":"/Users/emilymears/_dev/actions-deploy","author":{"name":"Matt Robenolt","email":"matt@ydekproductions.com"},"bin":{"raven":"bin/raven"},"bugs":{"url":"https://github.com/getsentry/raven-js/issues"},"dependencies":{"cookie":"0.3.1","md5":"^2.2.1","stack-trace":"0.0.10","timed-out":"4.0.1","uuid":"3.3.2"},"description":"A standalone (Node.js) client for Sentry","devDependencies":{"coffee-script":"~1.10.0","connect":"*","eslint":"^4.5.0","eslint-config-prettier":"^2.3.0","express":"*","glob":"~3.1.13","istanbul":"^0.4.3","mocha":"~3.1.2","nock":"~9.0.0","prettier":"^1.6.1","should":"11.2.0","sinon":"^3.3.0"},"engines":{"node":">= 4.0.0"},"homepage":"https://github.com/getsentry/raven-js","keywords":["debugging","errors","exceptions","logging","raven","sentry"],"license":"BSD-2-Clause","main":"index.js","name":"raven","prettier":{"singleQuote":true,"bracketSpacing":false,"printWidth":90},"repository":{"type":"git","url":"git://github.com/getsentry/raven-js.git"},"scripts":{"lint":"eslint .","test":"NODE_ENV=test istanbul cover _mocha  -- --reporter dot && NODE_ENV=test coffee ./test/run.coffee","test-full":"npm run test && cd test/instrumentation && ./run.sh","test-mocha":"NODE_ENV=test mocha"},"version":"2.6.4"};
+module.exports = {"name":"raven","description":"A standalone (Node.js) client for Sentry","keywords":["debugging","errors","exceptions","logging","raven","sentry"],"version":"2.6.4","repository":"git://github.com/getsentry/raven-js.git","license":"BSD-2-Clause","homepage":"https://github.com/getsentry/raven-js","author":"Matt Robenolt <matt@ydekproductions.com>","main":"index.js","bin":{"raven":"./bin/raven"},"scripts":{"lint":"eslint .","test":"NODE_ENV=test istanbul cover _mocha  -- --reporter dot && NODE_ENV=test coffee ./test/run.coffee","test-mocha":"NODE_ENV=test mocha","test-full":"npm run test && cd test/instrumentation && ./run.sh"},"engines":{"node":">= 4.0.0"},"dependencies":{"cookie":"0.3.1","md5":"^2.2.1","stack-trace":"0.0.10","timed-out":"4.0.1","uuid":"3.3.2"},"devDependencies":{"coffee-script":"~1.10.0","connect":"*","eslint":"^4.5.0","eslint-config-prettier":"^2.3.0","express":"*","glob":"~3.1.13","istanbul":"^0.4.3","mocha":"~3.1.2","nock":"~9.0.0","prettier":"^1.6.1","should":"11.2.0","sinon":"^3.3.0"},"prettier":{"singleQuote":true,"bracketSpacing":false,"printWidth":90},"_resolved":"https://registry.npmjs.org/raven/-/raven-2.6.4.tgz","_integrity":"sha512-6PQdfC4+DQSFncowthLf+B6Hr0JpPsFBgTVYTAOq7tCmx/kR4SXbeawtPch20+3QfUcQDoJBLjWW1ybvZ4kXTw==","_from":"raven@2.6.4"};
 
 /***/ }),
 /* 894 */,
@@ -95221,6 +96725,7 @@ function Octokit(plugins, options) {
 
 Object.defineProperty(exports, "__esModule", { value: true });
 const shell_1 = __webpack_require__(798);
+const logging_1 = __webpack_require__(376);
 exports.checkoutPullRequest = (pr) => {
     const { sha, ref } = pr.head;
     return shell_1.shell([
@@ -95229,23 +96734,21 @@ exports.checkoutPullRequest = (pr) => {
     ]);
 };
 exports.updatePullRequest = async (pr) => {
-    const currentCommit = pr.head.sha;
     const currentBranch = pr.head.ref;
     const baseBranch = pr.base.ref;
+    await shell_1.shell([`git fetch --unshallow origin ${baseBranch} ${currentBranch}`]);
     try {
         return await shell_1.shell([
-            `git fetch --unshallow origin ${baseBranch}`,
-            `git fetch --unshallow origin ${currentBranch}`,
-            `git pull --rebase origin ${baseBranch}`,
+            `git rebase origin/${baseBranch}`,
             `git push --force-with-lease origin ${currentBranch}`,
         ]);
     }
     catch (e) {
         // If rebase wasn't clean, reset and try regular merge
-        console.log("Rebase failed, trying merge instead");
+        logging_1.debug("Rebase failed, trying merge instead");
         return shell_1.shell([
-            `git reset --hard ${currentCommit}`,
-            `git pull origin ${baseBranch}`,
+            `git rebase --abort`,
+            `git merge origin/${baseBranch}`,
             `git push origin ${currentBranch}`,
         ]);
     }
@@ -97899,15 +99402,6 @@ function keysIn(object) {
 }
 
 module.exports = defaults;
-
-
-/***/ }),
-/* 996 */,
-/* 997 */,
-/* 998 */
-/***/ (function(module) {
-
-module.exports = eval("require")("./src/build/Release/obj.target/DTraceProviderBindings");
 
 
 /***/ })

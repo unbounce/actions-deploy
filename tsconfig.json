@@ -1,3 +1,7 @@
 {
-  "extends": "@unbounce/commons-tsconfig-node/tsconfig.json"
+  "extends": "@unbounce/commons-tsconfig-node/tsconfig.json",
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

@@ -25,7 +25,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     # Should be inverse of `if` below
-    if: "!((github.event_name == 'push' && github.ref == 'master') || (startsWith(github.event_name, 'issue_comment') && contains(github.event.comment.body, '/qa')))"
+    if: "!((github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged) || (startsWith(github.event_name, 'issue_comment') && contains(github.event.comment.body, '/qa')))"
     steps:
     # These tasks do not actually need a copy of the repository because it only performs automation tasks with the GitHub API
     # - uses: actions/checkout@master
@@ -33,6 +33,7 @@ jobs:
       with:
         release: make release # or: npm run release
         deploy: make deploy # or: npm run deploy --environment "$ENVIRONMENT" --version "$VERSION"
+        verify: make end-to-end-tests
 
   # Deployment tasks - this is where the actual deployment takes place
   # Runs on self-hosted runners so that it can have access to AWS resources for deployments
@@ -43,13 +44,14 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     # Should be inverse of `if` above
-    if: "(github.event_name == 'push' && github.ref == 'master') || (startsWith(github.event_name, 'issue_comment') && contains(github.event.comment.body, '/qa'))"
+    if: "((github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged) || (startsWith(github.event_name, 'issue_comment') && contains(github.event.comment.body, '/qa')))"
     steps:
     - uses: actions/checkout@master
     - uses: unbounce/actions-deploy@master
       with:
         release: make release # or: npm run release
         deploy: make deploy # or: npm run deploy --environment "$ENVIRONMENT" --version "$VERSION"
+        verify: make end-to-end-tests
 ```
 
 ### Configuration

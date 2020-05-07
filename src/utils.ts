@@ -1,11 +1,15 @@
-import type { Octokit } from "@octokit/rest";
-import { Context } from "probot";
+import type { Context } from "probot";
 
 import { config } from "./config";
 import * as comment from "./comment";
 import { ShellError } from "./shell";
 import { error } from "./logging";
-import { Deployment, PullRequest, DeploymentStatusState } from "./types";
+import {
+  Deployment,
+  PullRequest,
+  DeploymentStatusState,
+  CommitStatusState,
+} from "./types";
 
 // From https://github.com/probot/commands/blob/master/index.js
 export const commandMatches = (context: Context, match: string): boolean => {
@@ -32,7 +36,7 @@ export const createComment = (
 export const setCommitStatus = async (
   context: Context,
   pr: PullRequest,
-  state: Octokit["ReposCreateStatusParams"]["state"]
+  state: CommitStatusState
 ) => {
   const { sha } = pr.head;
   if (pr) {
@@ -71,6 +75,34 @@ export const findDeployment = async (context: Context, environment: string) => {
   } else {
     return undefined;
   }
+};
+
+export const findLastDeploymentForPullRequest = async (
+  context: Context,
+  prNumber: number
+) => {
+  const commits = await context.github.pulls.listCommits(
+    context.repo({ pull_number: prNumber })
+  );
+  for (let i = commits.data.length - 1; i >= 0; i--) {
+    const { sha } = commits.data[i];
+    const deployments = await context.github.repos.listDeployments(
+      context.repo({ sha })
+    );
+    if (deployments.data.length > 0) {
+      return deployments.data[0];
+    }
+  }
+  return undefined;
+};
+
+export const pullRequestHasBeenDeployed = async (
+  context: Context,
+  prNumber: number
+) => {
+  return (
+    (await findLastDeploymentForPullRequest(context, prNumber)) !== undefined
+  );
 };
 
 export const setDeploymentStatus = (
@@ -140,7 +172,7 @@ export const handleError = async (
   const message = `${text}: ${comment.code(errorMessage(e))}`;
   const body = [comment.mention(`${message} (${comment.runLink("Details")})`)];
   if (e instanceof ShellError) {
-    body.push(comment.details("Output", comment.codeBlock(e.output)));
+    body.push(comment.logToDetails(e.output));
   }
   await createComment(context, issueNumber, body);
   error(message);
