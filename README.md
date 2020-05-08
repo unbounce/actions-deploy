@@ -62,6 +62,7 @@ This action can be configured via the `with` section with the following configur
 |----|--------|-------|-----|
 |`release`|Yes||Command to run to perform release. Command is expected to create a release identified by the short git sha (`git rev-parse --short HEAD`). Environment variable `VERSION` will be available, or `git rev-parse --short HEAD` can be run to generate version.|
 |`deploy`|Yes||Command to run to perform deploy. Environment variables `ENVIRONMENT` and `VERSION` will be available.|
+|`verify`|No||Command to run to verify a deployment. Environment variables `ENVIRONMENT` and `VERSION` will be available.|
 |`master-branch`|No|`master`||
 |`production-environment`|No|`production`||
 |`pre-production-environment`|No|`integration`||
