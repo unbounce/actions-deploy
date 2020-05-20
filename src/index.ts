@@ -5,6 +5,7 @@ import type Webhooks from "@octokit/webhooks";
 import { config } from "./config";
 import {
   commandMatches,
+  commandParameters,
   createComment,
   setCommitStatus,
   setDeploymentStatus,
@@ -46,6 +47,19 @@ const handleDeploy = async (
     await setDeploymentStatus(context, id, "error");
     throw e;
   }
+};
+
+const runVerify = (version: string, environment: string) => {
+  const env = {
+    VERSION: version,
+    ENVIRONMENT: environment,
+  };
+  const commands = [
+    "echo ::group::Verify",
+    config.verifyCommand,
+    "echo ::endgroup::",
+  ];
+  return shell(commands, env);
 };
 
 const releaseDeployAndVerify = (
@@ -98,7 +112,7 @@ const handlePrMerged = async (
 
   if (deployment.sha !== pr.head.sha) {
     const message = [
-      `⚠️ The deployment to ${preProductionEnvironment} was outdated, so I skipped deployment to ${productionEnvironment}.`,
+      `️:warning: The deployment to ${preProductionEnvironment} was outdated, so I skipped deployment to ${productionEnvironment}.`,
       comment.mention(
         `, please check ${comment.code(
           pr.base.ref
@@ -356,6 +370,62 @@ const updateOutdatedDeployment = async (
   ]);
 };
 
+const handleVerify = async (
+  context: Context,
+  pr: PullRequest,
+  providedEnvironment: string
+) => {
+  const environment = providedEnvironment || config.preProductionEnvironment;
+  const deployment = await findDeployment(context, environment);
+
+  if (!deployment) {
+    await createComment(context, context.issue().number, [
+      `I wasn't able to find a deployment for ${environment}`,
+    ]);
+    return;
+  }
+
+  await checkoutPullRequest(pr);
+
+  try {
+    const version = await getShortSha(deployment.sha);
+    const output = await runVerify(version, environment);
+    const body: string[] = [];
+
+    if (environment === config.preProductionEnvironment) {
+      if (deploymentPullRequestNumber(deployment) === pr.number) {
+        await setDeploymentStatus(context, deployment.id, "success");
+      } else {
+        body.push(
+          `:warning: This pull request is not currently deployed to ${environment}. You can use ${comment.code(
+            "/qa"
+          )} to deploy it to ${environment}.`
+        );
+      }
+    }
+
+    await createComment(
+      context,
+      context.issue().number,
+      body.concat([
+        comment.mention(
+          `verification of ${environment} completed successfully (${comment.runLink(
+            "Details"
+          )})`
+        ),
+        comment.logToDetails(output),
+      ])
+    );
+  } catch (e) {
+    await handleError(
+      context,
+      pr.number,
+      `verification of ${environment} failed`,
+      e
+    );
+  }
+};
+
 const commentPullRequestNotDeployed = (context: Context) => {
   return createComment(context, context.issue().number, [
     `This pull request has not been deployed yet. You can use ${comment.code(
@@ -420,6 +490,12 @@ const probot = (app: Application) => {
         } else {
           await commentPullRequestNotDeployed(context);
         }
+        break;
+      }
+
+      case commandMatches(context, "verify"): {
+        const [providedEnvironment] = commandParameters(context);
+        await handleVerify(context, pr.data, providedEnvironment);
         break;
       }
 
