@@ -37442,7 +37442,7 @@ exports.commandMatches = (context, match) => {
 exports.commandParameters = (context) => {
     // tslint:disable-next-line:no-shadowed-variable
     const { comment, issue, pull_request: pr } = context.payload;
-    const parameters = (comment || issue || pr).body.match(/^\/[\w-]+\s*?(.*)?$/m);
+    const parameters = (comment || issue || pr).body.match(/^\/[\w-]+\s+(.*)?$/m);
     if (parameters && parameters[1]) {
         return parameters[1].split(" ");
     }

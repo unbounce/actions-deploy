@@ -27,7 +27,7 @@ export const commandParameters = (context: Context): string[] => {
   // tslint:disable-next-line:no-shadowed-variable
   const { comment, issue, pull_request: pr } = context.payload;
   const parameters = ((comment || issue || pr).body as string).match(
-    /^\/[\w-]+\s*?(.*)?$/m
+    /^\/[\w-]+\s+(.*)?$/m
   );
   if (parameters && parameters[1]) {
     return parameters[1].split(" ");
