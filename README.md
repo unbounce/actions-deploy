@@ -54,6 +54,24 @@ jobs:
         verify: make end-to-end-tests
 ```
 
+The main way to interact with this automation is to comment `/qa` on a pull
+request. This will create a release and deploy it to the pre-production
+environment. Then `/passed-qa` or `/failed-qa` should be commented once manual
+verification of the release is complete. Merging the pull request after
+commenting `/qa` will deploy the release to the production environment.
+
+### Commands
+
+Release and deployment automation is driven by commenting on the pull request.
+
+|Command|Notes|
+|-------|-----|
+|`/qa`|Create a release, deploy it to the pre-production environment and run `verify` command|
+|`/passed-qa`|Set "QA" status check to "success"|
+|`/failed-qa`|Set "QA" status check to "failed"|
+|`/verify`, `/verify <environment>`|(Re-)run `verify` command against an environment (environment defatuls to pre-production environment)|
+|`/deploy`, `/deploy <environment>`, `/deploy <environment> <version>`|(Re-)deploy a release to an environment and run `verify` command - `/qa` must have already been run on the pull request (environment defaults to pre-production environment, version defaults to latest release for the pull request)|
+
 ### Configuration
 
 This action can be configured via the `with` section with the following configuration options:
