@@ -12,6 +12,10 @@ inputs:
     description: Command to run to verify a deployment. Environment variables `ENVIRONMENT` and `VERSION` will be available.
     required: false
     default: 'echo No verify command provided'
+  setup:
+    description: Command to run before release, deploy, or verify
+    required: false
+    default: 'echo No setup command provided'
   main-branch:
     description: Name of the main branch for this repository
     required: false

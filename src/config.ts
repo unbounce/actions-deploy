@@ -14,4 +14,5 @@ export const config = {
   deployCommand: input("deploy"),
   releaseCommand: input("release"),
   verifyCommand: input("verify"),
+  setupCommand: input("setup"),
 };

@@ -26344,7 +26344,14 @@ const logging_1 = __webpack_require__(376);
 const shell_1 = __webpack_require__(798);
 const git_1 = __webpack_require__(984);
 const comment = __importStar(__webpack_require__(38));
-const handleDeploy = async (context, version, environment, payload, commands) => {
+const setup = () => {
+    return shell_1.shell([
+        "echo ::group::Setup",
+        config_1.config.setupCommand,
+        "echo ::endgroup::",
+    ]);
+};
+const createDeploymentAndDeploy = async (context, version, environment, payload, commands) => {
     // Resources created as part of an Action can not trigger other actions, so we
     // can't handle the deployment as part of `app.on('deployment')`
     const { data: { id }, } = await utils_1.createDeployment(context, version, environment, payload);
@@ -26375,7 +26382,7 @@ const runVerify = (version, environment) => {
     return shell_1.shell(commands, env);
 };
 const releaseDeployAndVerify = (context, version, environment, ref) => {
-    return handleDeploy(context, version, environment, { pr: context.issue().number }, [
+    return createDeploymentAndDeploy(context, version, environment, { pr: context.issue().number }, [
         "echo ::group::Release",
         `export RELEASE_BRANCH=${ref}`,
         config_1.config.releaseCommand,
@@ -26412,7 +26419,7 @@ const handlePrMerged = async (context, pr) => {
     logging_1.debug(`${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`);
     try {
         const version = await git_1.getShortSha(deployment.sha);
-        const output = await handleDeploy(context, version, productionEnvironment, { pr: pr.number }, [
+        const output = await createDeploymentAndDeploy(context, version, productionEnvironment, { pr: pr.number }, [
             "echo ::group::Deploy",
             config_1.config.deployCommand,
             "echo ::endgroup::",
@@ -26430,12 +26437,13 @@ const handlePrMerged = async (context, pr) => {
         await utils_1.handleError(context, pr.number, `deploy to ${productionEnvironment} failed`, e);
     }
 };
-const handleQA = async (context, pr) => {
+const handleQACommand = async (context, pr) => {
     const environment = config_1.config.preProductionEnvironment;
     const deployment = await utils_1.findDeployment(context, environment);
     if (utils_1.environmentIsAvailable(context, deployment)) {
         try {
             await git_1.checkoutPullRequest(pr);
+            await setup();
             try {
                 await git_1.updatePullRequest(pr);
             }
@@ -26524,7 +26532,7 @@ const resetPreProductionDeployment = async (context) => {
         return;
     }
     const version = await git_1.getShortSha(prodDeployment.sha);
-    const output = await handleDeploy(context, version, preProductionEnvironment, { pr: context.issue().number }, ["echo ::group::Deploy", config_1.config.deployCommand, "echo ::endgroup::"]);
+    const output = await createDeploymentAndDeploy(context, version, preProductionEnvironment, { pr: context.issue().number }, ["echo ::group::Deploy", config_1.config.deployCommand, "echo ::endgroup::"]);
     const body = [
         `Reset ${preProductionEnvironment} to version ${version} from ${productionEnvironment} (${comment.runLink("Details")}).`,
         comment.logToDetails(output),
@@ -26559,10 +26567,10 @@ const updateOutdatedDeployment = async (context, pr) => {
     logging_1.debug(`Re-deploying ${deployedPr.number} to ${preProductionEnvironment} with new commits...`);
     return Promise.all([
         utils_1.setCommitStatus(context, deployedPr, "pending"),
-        handleQA(context, deployedPr),
+        handleQACommand(context, deployedPr),
     ]);
 };
-const handleVerify = async (context, pr, providedEnvironment) => {
+const handleVerifyCommand = async (context, pr, providedEnvironment) => {
     const environment = providedEnvironment || config_1.config.preProductionEnvironment;
     const deployment = await utils_1.findDeployment(context, environment);
     if (!deployment) {
@@ -26572,6 +26580,7 @@ const handleVerify = async (context, pr, providedEnvironment) => {
         return;
     }
     await git_1.checkoutPullRequest(pr);
+    await setup();
     try {
         const version = await git_1.getShortSha(deployment.sha);
         const output = await runVerify(version, environment);
@@ -26591,6 +26600,38 @@ const handleVerify = async (context, pr, providedEnvironment) => {
     }
     catch (e) {
         await utils_1.handleError(context, pr.number, `verification of ${environment} failed`, e);
+    }
+};
+const handleDeployCommand = async (context, pr, providedEnvironment, providedVersion) => {
+    await git_1.checkoutPullRequest(pr);
+    await setup();
+    const environment = providedEnvironment || config_1.config.preProductionEnvironment;
+    const deployment = await utils_1.findLastDeploymentForPullRequest(context, pr.number);
+    if (!deployment) {
+        await utils_1.createComment(context, context.issue().number, [
+            `I wasn't able to find the latest release for #${pr.number}`,
+        ]);
+        return;
+    }
+    const deploymentVersion = await git_1.getShortSha(deployment.sha);
+    const version = providedVersion || deploymentVersion;
+    try {
+        const output = await createDeploymentAndDeploy(context, version, environment, { pr: pr.number }, [
+            "echo ::group::Deploy",
+            config_1.config.deployCommand,
+            "echo ::endgroup::",
+            "echo ::group::Verify",
+            config_1.config.verifyCommand,
+            "echo ::endgroup::",
+        ]);
+        const body = [
+            comment.mention(`deployed ${version} to ${environment} (${comment.runLink("Details")})`),
+            comment.logToDetails(output),
+        ];
+        await utils_1.createComment(context, pr.number, body);
+    }
+    catch (e) {
+        await utils_1.handleError(context, pr.number, `deploy to ${environment} failed`, e);
     }
 };
 const commentPullRequestNotDeployed = (context) => {
@@ -26626,7 +26667,7 @@ const probot = (app) => {
             case utils_1.commandMatches(context, "qa"): {
                 await Promise.all([
                     utils_1.setCommitStatus(context, pr.data, "pending"),
-                    handleQA(context, pr.data),
+                    handleQACommand(context, pr.data),
                 ]);
                 break;
             }
@@ -26650,7 +26691,12 @@ const probot = (app) => {
             }
             case utils_1.commandMatches(context, "verify"): {
                 const [providedEnvironment] = utils_1.commandParameters(context);
-                await handleVerify(context, pr.data, providedEnvironment);
+                await handleVerifyCommand(context, pr.data, providedEnvironment);
+                break;
+            }
+            case utils_1.commandMatches(context, "deploy"): {
+                const [providedEnvironment, providedVersion] = utils_1.commandParameters(context);
+                await handleDeployCommand(context, pr.data, providedEnvironment, providedVersion);
                 break;
             }
             default: {
@@ -37406,7 +37452,7 @@ exports.commandMatches = (context, match) => {
 exports.commandParameters = (context) => {
     // tslint:disable-next-line:no-shadowed-variable
     const { comment, issue, pull_request: pr } = context.payload;
-    const parameters = (comment || issue || pr).body.match(/^\/[\w-]+\s*?(.*)?$/m);
+    const parameters = (comment || issue || pr).body.match(/^\/[\w-]+\s+(.*)?$/m);
     if (parameters && parameters[1]) {
         return parameters[1].split(" ");
     }
@@ -58750,6 +58796,7 @@ exports.config = {
     deployCommand: input("deploy"),
     releaseCommand: input("release"),
     verifyCommand: input("verify"),
+    setupCommand: input("setup"),
 };
 
 
