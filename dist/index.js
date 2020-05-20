@@ -26362,6 +26362,18 @@ const handleDeploy = async (context, version, environment, payload, commands) =>
         throw e;
     }
 };
+const runVerify = (version, environment) => {
+    const env = {
+        VERSION: version,
+        ENVIRONMENT: environment,
+    };
+    const commands = [
+        "echo ::group::Verify",
+        config_1.config.verifyCommand,
+        "echo ::endgroup::",
+    ];
+    return shell_1.shell(commands, env);
+};
 const releaseDeployAndVerify = (context, version, environment, ref) => {
     return handleDeploy(context, version, environment, { pr: context.issue().number }, [
         "echo ::group::Release",
@@ -26391,7 +26403,7 @@ const handlePrMerged = async (context, pr) => {
     }
     if (deployment.sha !== pr.head.sha) {
         const message = [
-            `⚠️ The deployment to ${preProductionEnvironment} was outdated, so I skipped deployment to ${productionEnvironment}.`,
+            `️:warning: The deployment to ${preProductionEnvironment} was outdated, so I skipped deployment to ${productionEnvironment}.`,
             comment.mention(`, please check ${comment.code(pr.base.ref)} and deploy manually if necessary.`),
         ];
         await utils_1.createComment(context, pr.number, message);
@@ -26550,6 +26562,37 @@ const updateOutdatedDeployment = async (context, pr) => {
         handleQA(context, deployedPr),
     ]);
 };
+const handleVerify = async (context, pr, providedEnvironment) => {
+    const environment = providedEnvironment || config_1.config.preProductionEnvironment;
+    const deployment = await utils_1.findDeployment(context, environment);
+    if (!deployment) {
+        await utils_1.createComment(context, context.issue().number, [
+            `I wasn't able to find a deployment for ${environment}`,
+        ]);
+        return;
+    }
+    await git_1.checkoutPullRequest(pr);
+    try {
+        const version = await git_1.getShortSha(deployment.sha);
+        const output = await runVerify(version, environment);
+        const body = [];
+        if (environment === config_1.config.preProductionEnvironment) {
+            if (utils_1.deploymentPullRequestNumber(deployment) === pr.number) {
+                await utils_1.setDeploymentStatus(context, deployment.id, "success");
+            }
+            else {
+                body.push(`:warning: This pull request is not currently deployed to ${environment}. You can use ${comment.code("/qa")} to deploy it to ${environment}.`);
+            }
+        }
+        await utils_1.createComment(context, context.issue().number, body.concat([
+            comment.mention(`verification of ${environment} completed successfully (${comment.runLink("Details")})`),
+            comment.logToDetails(output),
+        ]));
+    }
+    catch (e) {
+        await utils_1.handleError(context, pr.number, `verification of ${environment} failed`, e);
+    }
+};
 const commentPullRequestNotDeployed = (context) => {
     return utils_1.createComment(context, context.issue().number, [
         `This pull request has not been deployed yet. You can use ${comment.code("/qa")} to deploy it to ${config_1.config.preProductionEnvironment} or ${comment.code("/skip-qa")} to not deploy this pull request.`,
@@ -26603,6 +26646,11 @@ const probot = (app) => {
                 else {
                     await commentPullRequestNotDeployed(context);
                 }
+                break;
+            }
+            case utils_1.commandMatches(context, "verify"): {
+                const [providedEnvironment] = utils_1.commandParameters(context);
+                await handleVerify(context, pr.data, providedEnvironment);
                 break;
             }
             default: {
@@ -37351,7 +37399,20 @@ exports.commandMatches = (context, match) => {
     // tslint:disable-next-line:no-shadowed-variable
     const { comment, issue, pull_request: pr } = context.payload;
     const command = (comment || issue || pr).body.match(/^\/([\w-]+)\s*?(.*)?$/m);
-    return command && command[1] === match;
+    return Boolean(command && command[1] === match);
+};
+// Return parameters included with a command, for example a command like
+// `/deploy production abc123` will return ["production", "abc123"]
+exports.commandParameters = (context) => {
+    // tslint:disable-next-line:no-shadowed-variable
+    const { comment, issue, pull_request: pr } = context.payload;
+    const parameters = (comment || issue || pr).body.match(/^\/[\w-]+\s*?(.*)?$/m);
+    if (parameters) {
+        return parameters[1].split(" ");
+    }
+    else {
+        return [];
+    }
 };
 exports.createComment = (context, issueNumber, body0) => {
     const body = typeof body0 === "string" ? body0 : body0.join("\n");

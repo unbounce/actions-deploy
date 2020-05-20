@@ -15,8 +15,25 @@ import {
 export const commandMatches = (context: Context, match: string): boolean => {
   // tslint:disable-next-line:no-shadowed-variable
   const { comment, issue, pull_request: pr } = context.payload;
-  const command = (comment || issue || pr).body.match(/^\/([\w-]+)\s*?(.*)?$/m);
-  return command && command[1] === match;
+  const command = ((comment || issue || pr).body as string).match(
+    /^\/([\w-]+)\s*?(.*)?$/m
+  );
+  return Boolean(command && command[1] === match);
+};
+
+// Return parameters included with a command, for example a command like
+// `/deploy production abc123` will return ["production", "abc123"]
+export const commandParameters = (context: Context): string[] => {
+  // tslint:disable-next-line:no-shadowed-variable
+  const { comment, issue, pull_request: pr } = context.payload;
+  const parameters = ((comment || issue || pr).body as string).match(
+    /^\/[\w-]+\s*?(.*)?$/m
+  );
+  if (parameters) {
+    return parameters[1].split(" ");
+  } else {
+    return [];
+  }
 };
 
 export const createComment = (
