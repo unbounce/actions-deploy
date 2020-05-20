@@ -24,6 +24,14 @@ import * as comment from "./comment";
 
 import { PullRequest } from "./types";
 
+const setup = () => {
+  return shell([
+    "echo ::group::Setup",
+    config.setupCommand,
+    "echo ::endgroup::",
+  ]);
+};
+
 const createDeploymentAndDeploy = async (
   context: Context,
   version: string,
@@ -165,13 +173,14 @@ const handlePrMerged = async (
   }
 };
 
-const handleQA = async (context: Context, pr: PullRequest) => {
+const handleQACommand = async (context: Context, pr: PullRequest) => {
   const environment = config.preProductionEnvironment;
   const deployment = await findDeployment(context, environment);
 
   if (environmentIsAvailable(context, deployment)) {
     try {
       await checkoutPullRequest(pr);
+      await setup();
       try {
         await updatePullRequest(pr);
       } catch (e) {
@@ -367,11 +376,11 @@ const updateOutdatedDeployment = async (
 
   return Promise.all([
     setCommitStatus(context, deployedPr, "pending"),
-    handleQA(context, deployedPr),
+    handleQACommand(context, deployedPr),
   ]);
 };
 
-const handleVerify = async (
+const handleVerifyCommand = async (
   context: Context,
   pr: PullRequest,
   providedEnvironment?: string
@@ -387,6 +396,7 @@ const handleVerify = async (
   }
 
   await checkoutPullRequest(pr);
+  await setup();
 
   try {
     const version = await getShortSha(deployment.sha);
@@ -427,13 +437,15 @@ const handleVerify = async (
   }
 };
 
-const handleDeploy = async (
+const handleDeployCommand = async (
   context: Context,
   pr: PullRequest,
   providedEnvironment?: string,
   providedVersion?: string
 ) => {
   await checkoutPullRequest(pr);
+  await setup();
+
   const environment = providedEnvironment || config.preProductionEnvironment;
   const deployment = await findLastDeploymentForPullRequest(context, pr.number);
 
@@ -520,7 +532,7 @@ const probot = (app: Application) => {
       case commandMatches(context, "qa"): {
         await Promise.all([
           setCommitStatus(context, pr.data, "pending"),
-          handleQA(context, pr.data),
+          handleQACommand(context, pr.data),
         ]);
         break;
       }
@@ -545,7 +557,7 @@ const probot = (app: Application) => {
 
       case commandMatches(context, "verify"): {
         const [providedEnvironment] = commandParameters(context);
-        await handleVerify(context, pr.data, providedEnvironment);
+        await handleVerifyCommand(context, pr.data, providedEnvironment);
         break;
       }
 
@@ -553,7 +565,7 @@ const probot = (app: Application) => {
         const [providedEnvironment, providedVersion] = commandParameters(
           context
         );
-        await handleDeploy(
+        await handleDeployCommand(
           context,
           pr.data,
           providedEnvironment,

@@ -26344,6 +26344,13 @@ const logging_1 = __webpack_require__(376);
 const shell_1 = __webpack_require__(798);
 const git_1 = __webpack_require__(984);
 const comment = __importStar(__webpack_require__(38));
+const setup = () => {
+    return shell_1.shell([
+        "echo ::group::Setup",
+        config_1.config.setupCommand,
+        "echo ::endgroup::",
+    ]);
+};
 const createDeploymentAndDeploy = async (context, version, environment, payload, commands) => {
     // Resources created as part of an Action can not trigger other actions, so we
     // can't handle the deployment as part of `app.on('deployment')`
@@ -26430,12 +26437,13 @@ const handlePrMerged = async (context, pr) => {
         await utils_1.handleError(context, pr.number, `deploy to ${productionEnvironment} failed`, e);
     }
 };
-const handleQA = async (context, pr) => {
+const handleQACommand = async (context, pr) => {
     const environment = config_1.config.preProductionEnvironment;
     const deployment = await utils_1.findDeployment(context, environment);
     if (utils_1.environmentIsAvailable(context, deployment)) {
         try {
             await git_1.checkoutPullRequest(pr);
+            await setup();
             try {
                 await git_1.updatePullRequest(pr);
             }
@@ -26559,10 +26567,10 @@ const updateOutdatedDeployment = async (context, pr) => {
     logging_1.debug(`Re-deploying ${deployedPr.number} to ${preProductionEnvironment} with new commits...`);
     return Promise.all([
         utils_1.setCommitStatus(context, deployedPr, "pending"),
-        handleQA(context, deployedPr),
+        handleQACommand(context, deployedPr),
     ]);
 };
-const handleVerify = async (context, pr, providedEnvironment) => {
+const handleVerifyCommand = async (context, pr, providedEnvironment) => {
     const environment = providedEnvironment || config_1.config.preProductionEnvironment;
     const deployment = await utils_1.findDeployment(context, environment);
     if (!deployment) {
@@ -26572,6 +26580,7 @@ const handleVerify = async (context, pr, providedEnvironment) => {
         return;
     }
     await git_1.checkoutPullRequest(pr);
+    await setup();
     try {
         const version = await git_1.getShortSha(deployment.sha);
         const output = await runVerify(version, environment);
@@ -26593,8 +26602,9 @@ const handleVerify = async (context, pr, providedEnvironment) => {
         await utils_1.handleError(context, pr.number, `verification of ${environment} failed`, e);
     }
 };
-const handleDeploy = async (context, pr, providedEnvironment, providedVersion) => {
+const handleDeployCommand = async (context, pr, providedEnvironment, providedVersion) => {
     await git_1.checkoutPullRequest(pr);
+    await setup();
     const environment = providedEnvironment || config_1.config.preProductionEnvironment;
     const deployment = await utils_1.findLastDeploymentForPullRequest(context, pr.number);
     if (!deployment) {
@@ -26657,7 +26667,7 @@ const probot = (app) => {
             case utils_1.commandMatches(context, "qa"): {
                 await Promise.all([
                     utils_1.setCommitStatus(context, pr.data, "pending"),
-                    handleQA(context, pr.data),
+                    handleQACommand(context, pr.data),
                 ]);
                 break;
             }
@@ -26681,12 +26691,12 @@ const probot = (app) => {
             }
             case utils_1.commandMatches(context, "verify"): {
                 const [providedEnvironment] = utils_1.commandParameters(context);
-                await handleVerify(context, pr.data, providedEnvironment);
+                await handleVerifyCommand(context, pr.data, providedEnvironment);
                 break;
             }
             case utils_1.commandMatches(context, "deploy"): {
                 const [providedEnvironment, providedVersion] = utils_1.commandParameters(context);
-                await handleDeploy(context, pr.data, providedEnvironment, providedVersion);
+                await handleDeployCommand(context, pr.data, providedEnvironment, providedVersion);
                 break;
             }
             default: {
@@ -58786,6 +58796,7 @@ exports.config = {
     deployCommand: input("deploy"),
     releaseCommand: input("release"),
     verifyCommand: input("verify"),
+    setupCommand: input("setup"),
 };
 
 
