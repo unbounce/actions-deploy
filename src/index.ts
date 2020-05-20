@@ -15,6 +15,7 @@ import {
   deploymentPullRequestNumber,
   handleError,
   pullRequestHasBeenDeployed,
+  findLastDeploymentForPullRequest,
 } from "./utils";
 import { debug, error } from "./logging";
 import { shell } from "./shell";
@@ -23,7 +24,7 @@ import * as comment from "./comment";
 
 import { PullRequest } from "./types";
 
-const handleDeploy = async (
+const createDeploymentAndDeploy = async (
   context: Context,
   version: string,
   environment: string,
@@ -68,7 +69,7 @@ const releaseDeployAndVerify = (
   environment: string,
   ref: string
 ) => {
-  return handleDeploy(
+  return createDeploymentAndDeploy(
     context,
     version,
     environment,
@@ -130,7 +131,7 @@ const handlePrMerged = async (
 
   try {
     const version = await getShortSha(deployment.sha);
-    const output = await handleDeploy(
+    const output = await createDeploymentAndDeploy(
       context,
       version,
       productionEnvironment,
@@ -303,7 +304,7 @@ const resetPreProductionDeployment = async (
   }
 
   const version = await getShortSha(prodDeployment.sha);
-  const output = await handleDeploy(
+  const output = await createDeploymentAndDeploy(
     context,
     version,
     preProductionEnvironment,
@@ -373,7 +374,7 @@ const updateOutdatedDeployment = async (
 const handleVerify = async (
   context: Context,
   pr: PullRequest,
-  providedEnvironment: string
+  providedEnvironment?: string
 ) => {
   const environment = providedEnvironment || config.preProductionEnvironment;
   const deployment = await findDeployment(context, environment);
@@ -423,6 +424,55 @@ const handleVerify = async (
       `verification of ${environment} failed`,
       e
     );
+  }
+};
+
+const handleDeploy = async (
+  context: Context,
+  pr: PullRequest,
+  providedEnvironment?: string,
+  providedVersion?: string
+) => {
+  await checkoutPullRequest(pr);
+  const environment = providedEnvironment || config.preProductionEnvironment;
+  const deployment = await findLastDeploymentForPullRequest(context, pr.number);
+
+  if (!deployment) {
+    await createComment(context, context.issue().number, [
+      `I wasn't able to find the latest release for #${pr.number}`,
+    ]);
+    return;
+  }
+
+  const deploymentVersion = await getShortSha(deployment.sha);
+  const version = providedVersion || deploymentVersion;
+
+  try {
+    const output = await createDeploymentAndDeploy(
+      context,
+      version,
+      environment,
+      { pr: pr.number },
+      [
+        "echo ::group::Deploy",
+        config.deployCommand,
+        "echo ::endgroup::",
+        "echo ::group::Verify",
+        config.verifyCommand,
+        "echo ::endgroup::",
+      ]
+    );
+
+    const body = [
+      comment.mention(
+        `deployed ${version} to ${environment} (${comment.runLink("Details")})`
+      ),
+      comment.logToDetails(output),
+    ];
+
+    await createComment(context, pr.number, body);
+  } catch (e) {
+    await handleError(context, pr.number, `deploy to ${environment} failed`, e);
   }
 };
 
@@ -496,6 +546,19 @@ const probot = (app: Application) => {
       case commandMatches(context, "verify"): {
         const [providedEnvironment] = commandParameters(context);
         await handleVerify(context, pr.data, providedEnvironment);
+        break;
+      }
+
+      case commandMatches(context, "deploy"): {
+        const [providedEnvironment, providedVersion] = commandParameters(
+          context
+        );
+        await handleDeploy(
+          context,
+          pr.data,
+          providedEnvironment,
+          providedVersion
+        );
         break;
       }
 
