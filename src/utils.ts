@@ -29,7 +29,7 @@ export const commandParameters = (context: Context): string[] => {
   const parameters = ((comment || issue || pr).body as string).match(
     /^\/[\w-]+\s*?(.*)?$/m
   );
-  if (parameters) {
+  if (parameters && parameters[1]) {
     return parameters[1].split(" ");
   } else {
     return [];
