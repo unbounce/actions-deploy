@@ -26408,8 +26408,8 @@ const createDeploymentAndSetStatus = async (context, version, environment, paylo
     }
     catch (e) {
         await utils_1.setDeploymentStatus(context, id, "error");
-        // TODO
-        // throw e;
+        // The error is not re-thrown here - it is handled within `f` and is only
+        // raised to this level so that the deployment can be marked as "error"
     }
 };
 const release = async (comment, version) => {
@@ -26511,7 +26511,26 @@ const handlePrMerged = async (context, pr) => {
     const environment = productionEnvironment;
     await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
         await deploy(comment, version, environment);
-        await verify(comment, version, environment);
+        try {
+            await verify(comment, version, environment);
+        }
+        catch (e) {
+            // Rollback
+            const previousDeployment = await utils_1.findPreviousDeployment(context, environment);
+            if (!previousDeployment) {
+                await comment.append(comment_1.warning(`Unable to find previous deployment for ${comment_1.code(environment)} to roll back to.`));
+                // Re-throw so that first deployment is marked as "error"
+                throw e;
+            }
+            const previousVersion = await git_1.getShortSha(deployment.sha);
+            await comment.append(comment_1.warning(`Rolling back ${comment_1.code(environment)} to ${previousVersion}...`));
+            await createDeploymentAndSetStatus(context, previousVersion, environment, { pr: utils_1.deploymentPullRequestNumber(previousDeployment) }, async () => {
+                await deploy(comment, previousVersion, environment);
+                await verify(comment, previousVersion, environment);
+            });
+            // Re-throw so that first deployment is marked as "error"
+            throw e;
+        }
         await comment.append(comment_1.success("Done"));
     });
 };
@@ -26617,11 +26636,6 @@ const resetPreProductionDeployment = async (context) => {
     });
     await comment.append(comment_1.success(`Reset ${preProductionEnvironment} to version ${version} from ${productionEnvironment}.`));
 };
-// const resetProductionDeployment = async (
-//   context: Context<Webhooks.WebhookPayloadPullRequest>
-// ) => {
-//   findPreviousDeployment
-// }
 const updateOutdatedDeployment = async (context, pr) => {
     const { preProductionEnvironment } = config_1.config;
     const deployment = await utils_1.findDeployment(context, preProductionEnvironment);

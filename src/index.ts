@@ -11,6 +11,7 @@ import {
   setDeploymentStatus,
   createDeployment,
   findDeployment,
+  findPreviousDeployment,
   environmentIsAvailable,
   deploymentPullRequestNumber,
   handleError,
@@ -55,8 +56,8 @@ const createDeploymentAndSetStatus = async (
     await setDeploymentStatus(context, id, "success");
   } catch (e) {
     await setDeploymentStatus(context, id, "error");
-    // TODO
-    // throw e;
+    // The error is not re-thrown here - it is handled within `f` and is only
+    // raised to this level so that the deployment can be marked as "error"
   }
 };
 
@@ -204,7 +205,43 @@ const handlePrMerged = async (
     { pr: pr.number },
     async () => {
       await deploy(comment, version, environment);
-      await verify(comment, version, environment);
+      try {
+        await verify(comment, version, environment);
+      } catch (e) {
+        // Rollback
+        const previousDeployment = await findPreviousDeployment(
+          context,
+          environment
+        );
+        if (!previousDeployment) {
+          await comment.append(
+            warning(
+              `Unable to find previous deployment for ${code(
+                environment
+              )} to roll back to.`
+            )
+          );
+          // Re-throw so that first deployment is marked as "error"
+          throw e;
+        }
+
+        const previousVersion = await getShortSha(deployment.sha);
+        await comment.append(
+          warning(`Rolling back ${code(environment)} to ${previousVersion}...`)
+        );
+        await createDeploymentAndSetStatus(
+          context,
+          previousVersion,
+          environment,
+          { pr: deploymentPullRequestNumber(previousDeployment) },
+          async () => {
+            await deploy(comment, previousVersion, environment);
+            await verify(comment, previousVersion, environment);
+          }
+        );
+        // Re-throw so that first deployment is marked as "error"
+        throw e;
+      }
       await comment.append(success("Done"));
     }
   );
@@ -371,12 +408,6 @@ const resetPreProductionDeployment = async (
     )
   );
 };
-
-// const resetProductionDeployment = async (
-//   context: Context<Webhooks.WebhookPayloadPullRequest>
-// ) => {
-//   findPreviousDeployment
-// }
 
 const updateOutdatedDeployment = async (
   context: Context<Webhooks.WebhookPayloadPullRequest>,
