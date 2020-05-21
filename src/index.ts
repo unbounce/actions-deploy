@@ -198,7 +198,7 @@ const handlePrMerged = async (
     `(${runLink("Details")})`
   );
   await comment.append(
-    mention("Deploying to ${code(productionEnvironment)}...")
+    mention(`Deploying to ${code(productionEnvironment)}...`)
   );
   const version = await getShortSha(deployment.sha);
   const environment = productionEnvironment;

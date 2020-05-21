@@ -26506,7 +26506,7 @@ const handlePrMerged = async (context, pr) => {
     }
     log.debug(`${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`);
     const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
-    await comment.append(comment_1.mention("Deploying to ${code(productionEnvironment)}..."));
+    await comment.append(comment_1.mention(`Deploying to ${comment_1.code(productionEnvironment)}...`));
     const version = await git_1.getShortSha(deployment.sha);
     const environment = productionEnvironment;
     await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
