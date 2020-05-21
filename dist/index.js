@@ -26495,12 +26495,7 @@ const handlePrMerged = async (context, pr) => {
     const environment = productionEnvironment;
     await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
         await deploy(comment, version, environment);
-        try {
-            await verify(comment, version, environment);
-        }
-        catch (e) {
-            await comment.append(comment_1.warning(comment_1.mention(`Verifying ${environment} deploy failed - attempting to redeploy previously deployed version to ${environment}.`)));
-        }
+        await verify(comment, version, environment);
         await comment.append(comment_1.success(comment_1.mention("done")));
     });
 };
@@ -26708,7 +26703,7 @@ const probot = (app) => {
         const pr = await context.github.pulls.get(context.issue());
         await utils_1.setCommitStatus(context, pr.data, "pending");
     });
-    app.on(["issue_created", "pull_request.opened"], async (context) => {
+    app.on(["issue_comment.created", "pull_request.opened"], async (context) => {
         const pr = await context.github.pulls.get(context.issue());
         if (!pr) {
             log.debug(`No pull request associated with comment ${context.issue()}`);

@@ -533,7 +533,7 @@ const probot = (app: Application) => {
     await setCommitStatus(context, pr.data, "pending");
   });
 
-  app.on(["issue_created", "pull_request.opened"], async (context) => {
+  app.on(["issue_comment.created", "pull_request.opened"], async (context) => {
     const pr = await context.github.pulls.get(context.issue());
 
     if (!pr) {
