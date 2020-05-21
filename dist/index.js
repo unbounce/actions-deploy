@@ -1835,12 +1835,12 @@ class Comment {
     update(id, lines) {
         const params = this.context.repo({
             comment_id: id,
-            body: lines.concat(this.footer).join("\n"),
+            body: lines.concat(this.footer).join("\n\n"),
         });
         return this.context.github.issues.updateComment(params);
     }
     async create(lines) {
-        const body = lines.concat(this.footer).join("\n");
+        const body = lines.concat(this.footer).join("\n\n");
         const params = this.context.repo({
             issue_number: this.issueNumber,
             body,
@@ -26408,7 +26408,7 @@ const createDeploymentAndSetStatus = async (context, version, environment, paylo
 };
 const release = async (comment, version) => {
     try {
-        await comment.ephemeral(`Releasing ${version}...`);
+        await comment.append(`Releasing ${version}...`);
         const env = {
             VERSION: version,
         };
@@ -26418,8 +26418,10 @@ const release = async (comment, version) => {
             "echo ::endgroup::",
         ];
         const output = await shell_1.shell(commands, env);
-        await comment.append(comment_1.logToDetails(output));
-        await comment.append(comment_1.success(`${version} was successfully released.`));
+        await comment.append([
+            comment_1.logToDetails(output),
+            comment_1.success(`${version} was successfully released.`),
+        ]);
     }
     catch (e) {
         await utils_1.handleError(comment, `releaseing ${version} failed`, e);
@@ -26428,7 +26430,7 @@ const release = async (comment, version) => {
 };
 const deploy = async (comment, version, environment) => {
     try {
-        await comment.ephemeral(`Deploying ${version} to ${environment}...`);
+        await comment.append(`Deploying ${version} to ${environment}...`);
         const env = {
             VERSION: version,
             ENVIRONMENT: environment,
@@ -26439,8 +26441,10 @@ const deploy = async (comment, version, environment) => {
             "echo ::endgroup::",
         ];
         const output = await shell_1.shell(commands, env);
-        await comment.append(comment_1.logToDetails(output));
-        await comment.append(comment_1.success(`${version} was successfully deployed to ${comment_1.code(environment)}.`));
+        await comment.append([
+            comment_1.logToDetails(output),
+            comment_1.success(`${version} was successfully deployed to ${comment_1.code(environment)}.`),
+        ]);
     }
     catch (e) {
         await utils_1.handleError(comment, `deploying ${version} to ${comment_1.code(environment)} failed`, e);
@@ -26449,7 +26453,7 @@ const deploy = async (comment, version, environment) => {
 };
 const verify = async (comment, version, environment) => {
     try {
-        await comment.ephemeral(`Verifying ${version} in ${environment}...`);
+        await comment.append(`Verifying ${version} in ${environment}...`);
         const env = {
             VERSION: version,
             ENVIRONMENT: environment,
@@ -26460,8 +26464,10 @@ const verify = async (comment, version, environment) => {
             "echo ::endgroup::",
         ];
         const output = await shell_1.shell(commands, env);
-        await comment.append(comment_1.logToDetails(output));
-        await comment.append(comment_1.success(`${version} was successfully verified in ${comment_1.code(environment)}.`));
+        await comment.append([
+            comment_1.logToDetails(output),
+            comment_1.success(`${version} was successfully verified in ${comment_1.code(environment)}.`),
+        ]);
     }
     catch (e) {
         await utils_1.handleError(comment, `verifying ${version} in ${comment_1.code(environment)} failed`, e);
@@ -26490,13 +26496,14 @@ const handlePrMerged = async (context, pr) => {
         return;
     }
     log.debug(`${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`);
-    const comment = new comment_1.Comment(context, context.issue().number, comment_1.runLink("Details"));
+    const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
+    await comment.append(comment_1.mention("Deploying to ${code(productionEnvironment)}..."));
     const version = await git_1.getShortSha(deployment.sha);
     const environment = productionEnvironment;
     await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
         await deploy(comment, version, environment);
         await verify(comment, version, environment);
-        await comment.append(comment_1.success(comment_1.mention("done")));
+        await comment.append(comment_1.success("Done"));
     });
 };
 const handleQACommand = async (context, pr) => {
@@ -26505,7 +26512,8 @@ const handleQACommand = async (context, pr) => {
     if (utils_1.environmentIsAvailable(context, deployment)) {
         await git_1.checkoutPullRequest(pr);
         await setup();
-        const comment = new comment_1.Comment(context, context.issue().number, comment_1.runLink("Details"));
+        const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
+        await comment.append(`Running ${comment_1.code("/qa")}...`);
         try {
             await git_1.updatePullRequest(pr);
         }
@@ -26519,7 +26527,7 @@ const handleQACommand = async (context, pr) => {
                 await release(comment, version);
                 await deploy(comment, version, environment);
                 await verify(comment, version, environment);
-                await comment.append(comment_1.success(comment_1.mention("done")));
+                await comment.append(comment_1.success("Done"));
             }
             catch (e) {
                 await utils_1.setCommitStatus(context, pr, "failure");
@@ -26591,13 +26599,12 @@ const resetPreProductionDeployment = async (context) => {
         log.debug(`No ${productionEnvironment} deployment found - quitting`);
         return;
     }
-    const comment = new comment_1.Comment(context, context.issue().number, comment_1.runLink("Details"));
+    const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
     const version = await git_1.getShortSha(prodDeployment.sha);
     const environment = preProductionEnvironment;
     await createDeploymentAndSetStatus(context, version, environment, { pr: context.issue().number }, async () => {
         await deploy(comment, version, environment);
         await verify(comment, version, environment);
-        await comment.append(comment_1.success(comment_1.mention("done")));
     });
     await comment.append(comment_1.success(`Reset ${preProductionEnvironment} to version ${version} from ${productionEnvironment}.`));
 };
@@ -26648,7 +26655,8 @@ const handleVerifyCommand = async (context, pr, providedEnvironment) => {
     }
     await git_1.checkoutPullRequest(pr);
     await setup();
-    const comment = new comment_1.Comment(context, context.issue().number, comment_1.runLink("Details"));
+    const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
+    await comment.append(`Running ${comment_1.code("/verify")}...`);
     try {
         const version = await git_1.getShortSha(deployment.sha);
         await verify(comment, version, environment);
@@ -26660,7 +26668,7 @@ const handleVerifyCommand = async (context, pr, providedEnvironment) => {
                 await comment.append(comment_1.warning(`This pull request is not currently deployed to ${environment}. You can use ${comment_1.code("/qa")} to deploy it to ${environment}.`));
             }
         }
-        await comment.append(comment_1.success(comment_1.mention("done")));
+        await comment.append(comment_1.success("Done"));
     }
     catch (e) {
         await utils_1.handleError(comment, `verification of ${environment} failed`, e);
@@ -26679,12 +26687,13 @@ const handleDeployCommand = async (context, pr, providedEnvironment, providedVer
     }
     const deploymentVersion = await git_1.getShortSha(deployment.sha);
     const version = providedVersion || deploymentVersion;
-    const comment = new comment_1.Comment(context, context.issue().number, comment_1.runLink("Details"));
+    const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
+    await comment.append(`Running ${comment_1.code("/deploy")}...`);
     await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
         await release(comment, version);
         await deploy(comment, version, environment);
         await verify(comment, version, environment);
-        await comment.append(comment_1.success(comment_1.mention("done")));
+        await comment.append(comment_1.success("Done"));
     });
 };
 const commentPullRequestNotDeployed = (context) => {

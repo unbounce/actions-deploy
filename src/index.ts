@@ -62,7 +62,7 @@ const createDeploymentAndSetStatus = async (
 
 const release = async (comment: Comment, version: string) => {
   try {
-    await comment.ephemeral(`Releasing ${version}...`);
+    await comment.append(`Releasing ${version}...`);
     const env = {
       VERSION: version,
     };
@@ -72,8 +72,10 @@ const release = async (comment: Comment, version: string) => {
       "echo ::endgroup::",
     ];
     const output = await shell(commands, env);
-    await comment.append(logToDetails(output));
-    await comment.append(success(`${version} was successfully released.`));
+    await comment.append([
+      logToDetails(output),
+      success(`${version} was successfully released.`),
+    ]);
   } catch (e) {
     await handleError(comment, `releaseing ${version} failed`, e);
     throw e;
@@ -86,7 +88,7 @@ const deploy = async (
   environment: string
 ) => {
   try {
-    await comment.ephemeral(`Deploying ${version} to ${environment}...`);
+    await comment.append(`Deploying ${version} to ${environment}...`);
     const env = {
       VERSION: version,
       ENVIRONMENT: environment,
@@ -97,10 +99,10 @@ const deploy = async (
       "echo ::endgroup::",
     ];
     const output = await shell(commands, env);
-    await comment.append(logToDetails(output));
-    await comment.append(
-      success(`${version} was successfully deployed to ${code(environment)}.`)
-    );
+    await comment.append([
+      logToDetails(output),
+      success(`${version} was successfully deployed to ${code(environment)}.`),
+    ]);
   } catch (e) {
     await handleError(
       comment,
@@ -117,7 +119,7 @@ const verify = async (
   environment: string
 ) => {
   try {
-    await comment.ephemeral(`Verifying ${version} in ${environment}...`);
+    await comment.append(`Verifying ${version} in ${environment}...`);
     const env = {
       VERSION: version,
       ENVIRONMENT: environment,
@@ -128,10 +130,10 @@ const verify = async (
       "echo ::endgroup::",
     ];
     const output = await shell(commands, env);
-    await comment.append(logToDetails(output));
-    await comment.append(
-      success(`${version} was successfully verified in ${code(environment)}.`)
-    );
+    await comment.append([
+      logToDetails(output),
+      success(`${version} was successfully verified in ${code(environment)}.`),
+    ]);
   } catch (e) {
     await handleError(
       comment,
@@ -185,7 +187,10 @@ const handlePrMerged = async (
   const comment = new Comment(
     context,
     context.issue().number,
-    runLink("Details")
+    `(${runLink("Details")})`
+  );
+  await comment.append(
+    mention("Deploying to ${code(productionEnvironment)}...")
   );
   const version = await getShortSha(deployment.sha);
   const environment = productionEnvironment;
@@ -197,7 +202,7 @@ const handlePrMerged = async (
     async () => {
       await deploy(comment, version, environment);
       await verify(comment, version, environment);
-      await comment.append(success(mention("done")));
+      await comment.append(success("Done"));
     }
   );
 };
@@ -212,8 +217,9 @@ const handleQACommand = async (context: Context, pr: PullRequest) => {
     const comment = new Comment(
       context,
       context.issue().number,
-      runLink("Details")
+      `(${runLink("Details")})`
     );
+    await comment.append(`Running ${code("/qa")}...`);
     try {
       await updatePullRequest(pr);
     } catch (e) {
@@ -236,7 +242,7 @@ const handleQACommand = async (context: Context, pr: PullRequest) => {
           await release(comment, version);
           await deploy(comment, version, environment);
           await verify(comment, version, environment);
-          await comment.append(success(mention("done")));
+          await comment.append(success("Done"));
         } catch (e) {
           await setCommitStatus(context, pr, "failure");
           throw e;
@@ -340,7 +346,7 @@ const resetPreProductionDeployment = async (
   const comment = new Comment(
     context,
     context.issue().number,
-    runLink("Details")
+    `(${runLink("Details")})`
   );
   const version = await getShortSha(prodDeployment.sha);
   const environment = preProductionEnvironment;
@@ -353,7 +359,6 @@ const resetPreProductionDeployment = async (
     async () => {
       await deploy(comment, version, environment);
       await verify(comment, version, environment);
-      await comment.append(success(mention("done")));
     }
   );
 
@@ -441,8 +446,9 @@ const handleVerifyCommand = async (
   const comment = new Comment(
     context,
     context.issue().number,
-    runLink("Details")
+    `(${runLink("Details")})`
   );
+  await comment.append(`Running ${code("/verify")}...`);
 
   try {
     const version = await getShortSha(deployment.sha);
@@ -462,7 +468,7 @@ const handleVerifyCommand = async (
       }
     }
 
-    await comment.append(success(mention("done")));
+    await comment.append(success("Done"));
   } catch (e) {
     await handleError(comment, `verification of ${environment} failed`, e);
   }
@@ -492,8 +498,9 @@ const handleDeployCommand = async (
   const comment = new Comment(
     context,
     context.issue().number,
-    runLink("Details")
+    `(${runLink("Details")})`
   );
+  await comment.append(`Running ${code("/deploy")}...`);
 
   await createDeploymentAndSetStatus(
     context,
@@ -504,7 +511,7 @@ const handleDeployCommand = async (
       await release(comment, version);
       await deploy(comment, version, environment);
       await verify(comment, version, environment);
-      await comment.append(success(mention("done")));
+      await comment.append(success("Done"));
     }
   );
 };

@@ -120,13 +120,13 @@ export class Comment {
   private update(id: number, lines: string[]) {
     const params = this.context.repo({
       comment_id: id,
-      body: lines.concat(this.footer).join("\n"),
+      body: lines.concat(this.footer).join("\n\n"),
     });
     return this.context.github.issues.updateComment(params);
   }
 
   private async create(lines: string[]) {
-    const body = lines.concat(this.footer).join("\n");
+    const body = lines.concat(this.footer).join("\n\n");
     const params = this.context.repo({
       issue_number: this.issueNumber,
       body,
