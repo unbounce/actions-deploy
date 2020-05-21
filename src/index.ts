@@ -286,6 +286,7 @@ const handleQACommand = async (context: Context, pr: PullRequest) => {
           await release(comment, version);
           await deploy(comment, version, environment);
           await verify(comment, version, environment);
+          comment.separator();
           await comment.append([
             success("Done"),
             `Comment ${code("/passed-qa")} or ${code(
