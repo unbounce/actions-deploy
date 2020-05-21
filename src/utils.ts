@@ -2,6 +2,7 @@ import type { Context } from "probot";
 
 import { config } from "./config";
 import * as comment from "./comment";
+import { ShellError } from "./shell";
 import { error } from "./logging";
 import {
   Deployment,
@@ -211,6 +212,10 @@ export const handleError = async (
   e: Error
 ) => {
   const message = `${text}: ${comment.code(errorMessage(e))}`;
-  await existingComment.append(comment.error(comment.mention(`${message}`)));
+  const body = [comment.error(comment.mention(`${message}`))];
+  if (e instanceof ShellError) {
+    body.push(comment.logToDetails(e.output));
+  }
+  await existingComment.append(body);
   error(message);
 };

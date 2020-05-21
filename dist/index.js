@@ -26495,7 +26495,12 @@ const handlePrMerged = async (context, pr) => {
     const environment = productionEnvironment;
     await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
         await deploy(comment, version, environment);
-        await verify(comment, version, environment);
+        try {
+            await verify(comment, version, environment);
+        }
+        catch (e) {
+            await comment.append(comment_1.warning(comment_1.mention(`Verifying ${environment} deploy failed - attempting to redeploy previously deployed version to ${environment}.`)));
+        }
         await comment.append(comment_1.success(comment_1.mention("done")));
     });
 };
@@ -37491,6 +37496,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const config_1 = __webpack_require__(641);
 const comment = __importStar(__webpack_require__(38));
+const shell_1 = __webpack_require__(798);
 const logging_1 = __webpack_require__(376);
 // From https://github.com/probot/commands/blob/master/index.js
 exports.commandMatches = (context, match) => {
@@ -37627,7 +37633,11 @@ const errorMessage = (e) => {
 };
 exports.handleError = async (existingComment, text, e) => {
     const message = `${text}: ${comment.code(errorMessage(e))}`;
-    await existingComment.append(comment.error(comment.mention(`${message}`)));
+    const body = [comment.error(comment.mention(`${message}`))];
+    if (e instanceof shell_1.ShellError) {
+        body.push(comment.logToDetails(e.output));
+    }
+    await existingComment.append(body);
     logging_1.error(message);
 };
 
