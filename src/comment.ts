@@ -93,12 +93,17 @@ export const logToDetails = (log: string) => {
 export class Comment {
   private id?: number;
   private lines: string[] = [];
+  private footer: string[] = ["---"];
 
   constructor(
     private context: Context,
     private issueNumber: number,
-    private footer: string | string[] = []
-  ) {}
+    footer?: string | string[]
+  ) {
+    if (footer) {
+      this.footer = this.footer.concat(footer);
+    }
+  }
 
   async append(lines: string | string[]) {
     this.lines = this.lines.concat(lines);
@@ -107,6 +112,10 @@ export class Comment {
 
   async ephemeral(ephemeralLines: string | string[]) {
     await this.apply(this.lines.concat(ephemeralLines));
+  }
+
+  separator() {
+    this.lines.push("---");
   }
 
   private apply(lines: string[]) {

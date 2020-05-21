@@ -62,6 +62,7 @@ const createDeploymentAndSetStatus = async (
 
 const release = async (comment: Comment, version: string) => {
   try {
+    comment.separator();
     await comment.append(`Releasing ${version}...`);
     const env = {
       VERSION: version,
@@ -88,6 +89,7 @@ const deploy = async (
   environment: string
 ) => {
   try {
+    comment.separator();
     await comment.append(`Deploying ${version} to ${environment}...`);
     const env = {
       VERSION: version,
@@ -119,6 +121,7 @@ const verify = async (
   environment: string
 ) => {
   try {
+    comment.separator();
     await comment.append(`Verifying ${version} in ${environment}...`);
     const env = {
       VERSION: version,
@@ -448,7 +451,7 @@ const handleVerifyCommand = async (
     context.issue().number,
     `(${runLink("Details")})`
   );
-  await comment.append(`Running ${code("/verify")}...`);
+  await comment.append(`Running ${code(`/verify ${environment}`)}...`);
 
   try {
     const version = await getShortSha(deployment.sha);
@@ -500,7 +503,9 @@ const handleDeployCommand = async (
     context.issue().number,
     `(${runLink("Details")})`
   );
-  await comment.append(`Running ${code("/deploy")}...`);
+  await comment.append(
+    `Running ${code(`/deploy ${environment} ${version}`)}...`
+  );
 
   await createDeploymentAndSetStatus(
     context,

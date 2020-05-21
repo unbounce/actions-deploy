@@ -1811,11 +1811,14 @@ exports.logToDetails = (log) => {
     }
 };
 class Comment {
-    constructor(context, issueNumber, footer = []) {
+    constructor(context, issueNumber, footer) {
         this.context = context;
         this.issueNumber = issueNumber;
-        this.footer = footer;
         this.lines = [];
+        this.footer = ["---"];
+        if (footer) {
+            this.footer = this.footer.concat(footer);
+        }
     }
     async append(lines) {
         this.lines = this.lines.concat(lines);
@@ -1823,6 +1826,9 @@ class Comment {
     }
     async ephemeral(ephemeralLines) {
         await this.apply(this.lines.concat(ephemeralLines));
+    }
+    separator() {
+        this.lines.push("---");
     }
     apply(lines) {
         if (typeof this.id === "undefined") {
@@ -26408,6 +26414,7 @@ const createDeploymentAndSetStatus = async (context, version, environment, paylo
 };
 const release = async (comment, version) => {
     try {
+        comment.separator();
         await comment.append(`Releasing ${version}...`);
         const env = {
             VERSION: version,
@@ -26430,6 +26437,7 @@ const release = async (comment, version) => {
 };
 const deploy = async (comment, version, environment) => {
     try {
+        comment.separator();
         await comment.append(`Deploying ${version} to ${environment}...`);
         const env = {
             VERSION: version,
@@ -26453,6 +26461,7 @@ const deploy = async (comment, version, environment) => {
 };
 const verify = async (comment, version, environment) => {
     try {
+        comment.separator();
         await comment.append(`Verifying ${version} in ${environment}...`);
         const env = {
             VERSION: version,
@@ -26656,7 +26665,7 @@ const handleVerifyCommand = async (context, pr, providedEnvironment) => {
     await git_1.checkoutPullRequest(pr);
     await setup();
     const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
-    await comment.append(`Running ${comment_1.code("/verify")}...`);
+    await comment.append(`Running ${comment_1.code(`/verify ${environment}`)}...`);
     try {
         const version = await git_1.getShortSha(deployment.sha);
         await verify(comment, version, environment);
@@ -26688,7 +26697,7 @@ const handleDeployCommand = async (context, pr, providedEnvironment, providedVer
     const deploymentVersion = await git_1.getShortSha(deployment.sha);
     const version = providedVersion || deploymentVersion;
     const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
-    await comment.append(`Running ${comment_1.code("/deploy")}...`);
+    await comment.append(`Running ${comment_1.code(`/deploy ${environment} ${version}`)}...`);
     await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
         await release(comment, version);
         await deploy(comment, version, environment);
