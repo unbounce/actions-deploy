@@ -33,14 +33,6 @@ import {
 
 import { PullRequest } from "./types";
 
-const setup = () => {
-  return shell([
-    "echo ::group::Setup",
-    config.setupCommand,
-    "echo ::endgroup::",
-  ]);
-};
-
 const createDeploymentAndSetStatus = async (
   context: Context,
   version: string,
@@ -58,6 +50,19 @@ const createDeploymentAndSetStatus = async (
     await setDeploymentStatus(context, id, "error");
     // The error is not re-thrown here - it is handled within `f` and is only
     // raised to this level so that the deployment can be marked as "error"
+  }
+};
+
+const setup = async (comment: Comment) => {
+  try {
+    await shell([
+      "echo ::group::Setup",
+      config.setupCommand,
+      "echo ::endgroup::",
+    ]);
+  } catch (e) {
+    await handleError(comment, `setup failed`, e);
+    throw e;
   }
 };
 
@@ -200,6 +205,7 @@ const handlePrMerged = async (
   await comment.append(
     mention(`Deploying to ${code(productionEnvironment)}...`)
   );
+  await setup(comment);
   const version = await getShortSha(deployment.sha);
   const environment = productionEnvironment;
   await createDeploymentAndSetStatus(
@@ -257,13 +263,13 @@ const handleQACommand = async (context: Context, pr: PullRequest) => {
 
   if (environmentIsAvailable(context, deployment)) {
     await checkoutPullRequest(pr);
-    await setup();
     const comment = new Comment(
       context,
       context.issue().number,
       `(${runLink("Details")})`
     );
     await comment.append(`Running ${code("/qa")}...`);
+    await setup(comment);
     try {
       await updatePullRequest(pr);
     } catch (e) {
@@ -491,7 +497,6 @@ const handleVerifyCommand = async (
   }
 
   await checkoutPullRequest(pr);
-  await setup();
 
   const comment = new Comment(
     context,
@@ -499,6 +504,8 @@ const handleVerifyCommand = async (
     `(${runLink("Details")})`
   );
   await comment.append(`Running ${code(`/verify ${environment}`)}...`);
+
+  await setup(comment);
 
   try {
     const version = await getShortSha(deployment.sha);
@@ -536,9 +543,6 @@ const handleDeployCommand = async (
   providedEnvironment?: string,
   providedVersion?: string
 ) => {
-  await checkoutPullRequest(pr);
-  await setup();
-
   const environment = providedEnvironment || config.preProductionEnvironment;
   const deployment = await findLastDeploymentForPullRequest(context, pr.number);
 
@@ -548,6 +552,8 @@ const handleDeployCommand = async (
     ]);
     return;
   }
+
+  await checkoutPullRequest(pr);
 
   const deploymentVersion = await getShortSha(deployment.sha);
   const version = providedVersion || deploymentVersion;
@@ -559,6 +565,8 @@ const handleDeployCommand = async (
   await comment.append(
     `Running ${code(`/deploy ${environment} ${version}`)}...`
   );
+
+  await setup(comment);
 
   await createDeploymentAndSetStatus(
     context,

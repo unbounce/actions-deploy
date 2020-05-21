@@ -26393,13 +26393,6 @@ const log = __importStar(__webpack_require__(376));
 const shell_1 = __webpack_require__(798);
 const git_1 = __webpack_require__(984);
 const comment_1 = __webpack_require__(38);
-const setup = () => {
-    return shell_1.shell([
-        "echo ::group::Setup",
-        config_1.config.setupCommand,
-        "echo ::endgroup::",
-    ]);
-};
 const createDeploymentAndSetStatus = async (context, version, environment, payload, f) => {
     const { data: { id }, } = await utils_1.createDeployment(context, version, environment, payload);
     try {
@@ -26410,6 +26403,19 @@ const createDeploymentAndSetStatus = async (context, version, environment, paylo
         await utils_1.setDeploymentStatus(context, id, "error");
         // The error is not re-thrown here - it is handled within `f` and is only
         // raised to this level so that the deployment can be marked as "error"
+    }
+};
+const setup = async (comment) => {
+    try {
+        await shell_1.shell([
+            "echo ::group::Setup",
+            config_1.config.setupCommand,
+            "echo ::endgroup::",
+        ]);
+    }
+    catch (e) {
+        await utils_1.handleError(comment, `setup failed`, e);
+        throw e;
     }
 };
 const release = async (comment, version) => {
@@ -26507,6 +26513,7 @@ const handlePrMerged = async (context, pr) => {
     log.debug(`${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`);
     const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
     await comment.append(comment_1.mention(`Deploying to ${comment_1.code(productionEnvironment)}...`));
+    await setup(comment);
     const version = await git_1.getShortSha(deployment.sha);
     const environment = productionEnvironment;
     await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
@@ -26539,9 +26546,9 @@ const handleQACommand = async (context, pr) => {
     const deployment = await utils_1.findDeployment(context, environment);
     if (utils_1.environmentIsAvailable(context, deployment)) {
         await git_1.checkoutPullRequest(pr);
-        await setup();
         const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
         await comment.append(`Running ${comment_1.code("/qa")}...`);
+        await setup(comment);
         try {
             await git_1.updatePullRequest(pr);
         }
@@ -26681,9 +26688,9 @@ const handleVerifyCommand = async (context, pr, providedEnvironment) => {
         return;
     }
     await git_1.checkoutPullRequest(pr);
-    await setup();
     const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
     await comment.append(`Running ${comment_1.code(`/verify ${environment}`)}...`);
+    await setup(comment);
     try {
         const version = await git_1.getShortSha(deployment.sha);
         await verify(comment, version, environment);
@@ -26702,8 +26709,6 @@ const handleVerifyCommand = async (context, pr, providedEnvironment) => {
     }
 };
 const handleDeployCommand = async (context, pr, providedEnvironment, providedVersion) => {
-    await git_1.checkoutPullRequest(pr);
-    await setup();
     const environment = providedEnvironment || config_1.config.preProductionEnvironment;
     const deployment = await utils_1.findLastDeploymentForPullRequest(context, pr.number);
     if (!deployment) {
@@ -26712,10 +26717,12 @@ const handleDeployCommand = async (context, pr, providedEnvironment, providedVer
         ]);
         return;
     }
+    await git_1.checkoutPullRequest(pr);
     const deploymentVersion = await git_1.getShortSha(deployment.sha);
     const version = providedVersion || deploymentVersion;
     const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
     await comment.append(`Running ${comment_1.code(`/deploy ${environment} ${version}`)}...`);
+    await setup(comment);
     await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
         await release(comment, version);
         await deploy(comment, version, environment);
