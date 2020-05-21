@@ -26438,7 +26438,7 @@ const release = async (comment, version) => {
 const deploy = async (comment, version, environment) => {
     try {
         comment.separator();
-        await comment.append(`Deploying ${version} to ${environment}...`);
+        await comment.append(`Deploying ${version} to ${comment_1.code(environment)}...`);
         const env = {
             VERSION: version,
             ENVIRONMENT: environment,
@@ -26462,7 +26462,7 @@ const deploy = async (comment, version, environment) => {
 const verify = async (comment, version, environment) => {
     try {
         comment.separator();
-        await comment.append(`Verifying ${version} in ${environment}...`);
+        await comment.append(`Verifying ${version} in ${comment_1.code(environment)}...`);
         const env = {
             VERSION: version,
             ENVIRONMENT: environment,
@@ -26498,7 +26498,7 @@ const handlePrMerged = async (context, pr) => {
     }
     if (deployment.sha !== pr.head.sha) {
         const message = [
-            comment_1.warning(`️The deployment to ${preProductionEnvironment} was outdated, so I skipped deployment to ${productionEnvironment}.`),
+            comment_1.warning(`️The deployment to ${comment_1.code(preProductionEnvironment)} was outdated, so I skipped deployment to ${comment_1.code(productionEnvironment)}.`),
             comment_1.mention(`, please check ${comment_1.code(pr.base.ref)} and deploy manually if necessary.`),
         ];
         await utils_1.createComment(context, pr.number, message);
@@ -26565,7 +26565,7 @@ const handleQACommand = async (context, pr) => {
     }
     else {
         const prNumber = utils_1.deploymentPullRequestNumber(deployment);
-        const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
+        const message = `#${prNumber} is currently deployed to ${comment_1.code(environment)}. It must be merged or closed before this pull request can be deployed.`;
         await utils_1.createComment(context, pr.number, [comment_1.mention(message)]);
         log.error(message);
     }
@@ -26590,8 +26590,8 @@ const invalidateDeployedPullRequest = async (context) => {
                 log.debug(`The pull request currently deployed to ${environment} (#${deployedPr}) has the same base (${baseRef}) - invalidating it`);
                 const body = [
                     `This pull request is no longer up-to-date with ${baseRef} (because #${prNumber} was just merged, which changed ${baseRef}).`,
-                    `Run ${comment_1.code("/qa")} to redeploy your changes to ${environment} or ${comment_1.code("/skip-qa")} if you want to ignore the changes in ${baseRef}.`,
-                    `Note that using ${comment_1.code("/skip-qa")} will cause the new changes in ${baseRef} to be excluded when this pull request is merged, and they will not be deployed to ${config_1.config.productionEnvironment}.`,
+                    `Run ${comment_1.code("/qa")} to redeploy your changes to ${comment_1.code(environment)} or ${comment_1.code("/skip-qa")} if you want to ignore the changes in ${baseRef}.`,
+                    `Note that using ${comment_1.code("/skip-qa")} will cause the new changes in ${baseRef} to be excluded when this pull request is merged, and they will not be deployed to ${comment_1.code(config_1.config.productionEnvironment)}.`,
                 ].join(" ");
                 await Promise.all([
                     utils_1.setCommitStatus(context, deployedPr.data, "pending"),
@@ -26634,7 +26634,7 @@ const resetPreProductionDeployment = async (context) => {
         await deploy(comment, version, environment);
         await verify(comment, version, environment);
     });
-    await comment.append(comment_1.success(`Reset ${preProductionEnvironment} to version ${version} from ${productionEnvironment}.`));
+    await comment.append(comment_1.success(`Reset ${comment_1.code(preProductionEnvironment)} to version ${version} from ${comment_1.code(productionEnvironment)}.`));
 };
 const updateOutdatedDeployment = async (context, pr) => {
     const { preProductionEnvironment } = config_1.config;
@@ -26672,7 +26672,7 @@ const handleVerifyCommand = async (context, pr, providedEnvironment) => {
     const deployment = await utils_1.findDeployment(context, environment);
     if (!deployment) {
         await utils_1.createComment(context, context.issue().number, [
-            `I wasn't able to find a deployment for ${environment}`,
+            `I wasn't able to find a deployment for ${comment_1.code(environment)} to verify.`,
         ]);
         return;
     }
@@ -26688,13 +26688,13 @@ const handleVerifyCommand = async (context, pr, providedEnvironment) => {
                 await utils_1.setDeploymentStatus(context, deployment.id, "success");
             }
             else {
-                await comment.append(comment_1.warning(`This pull request is not currently deployed to ${environment}. You can use ${comment_1.code("/qa")} to deploy it to ${environment}.`));
+                await comment.append(comment_1.warning(`This pull request is not currently deployed to ${comment_1.code(environment)}. You can use ${comment_1.code("/qa")} to deploy it to ${comment_1.code(environment)}.`));
             }
         }
         await comment.append(comment_1.success("Done"));
     }
     catch (e) {
-        await utils_1.handleError(comment, `verification of ${environment} failed`, e);
+        await utils_1.handleError(comment, `verification of ${comment_1.code(environment)} failed`, e);
     }
 };
 const handleDeployCommand = async (context, pr, providedEnvironment, providedVersion) => {
@@ -26721,7 +26721,7 @@ const handleDeployCommand = async (context, pr, providedEnvironment, providedVer
 };
 const commentPullRequestNotDeployed = (context) => {
     return utils_1.createComment(context, context.issue().number, [
-        `This pull request has not been deployed yet. You can use ${comment_1.code("/qa")} to deploy it to ${config_1.config.preProductionEnvironment} or ${comment_1.code("/skip-qa")} to not deploy this pull request.`,
+        `This pull request has not been deployed yet. You can use ${comment_1.code("/qa")} to deploy it to ${comment_1.code(config_1.config.preProductionEnvironment)} or ${comment_1.code("/skip-qa")} to not deploy this pull request.`,
     ]);
 };
 const probot = (app) => {
