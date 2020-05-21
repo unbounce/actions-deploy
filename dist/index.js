@@ -26555,7 +26555,10 @@ const handleQACommand = async (context, pr) => {
                 await release(comment, version);
                 await deploy(comment, version, environment);
                 await verify(comment, version, environment);
-                await comment.append(comment_1.success("Done"));
+                await comment.append([
+                    comment_1.success("Done"),
+                    `Comment ${comment_1.code("/passed-qa")} or ${comment_1.code("/failed-qa")} once you have verified the changes. Merging this pull request will deploy it to ${comment_1.code(config_1.config.productionEnvironment)}.`,
+                ]);
             }
             catch (e) {
                 await utils_1.setCommitStatus(context, pr, "failure");
