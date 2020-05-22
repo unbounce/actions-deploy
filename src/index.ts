@@ -614,7 +614,16 @@ const probot = (app: Application) => {
     const pr = await context.github.pulls.get(context.issue());
 
     if (!pr) {
-      log.debug(`No pull request associated with comment ${context.issue()}`);
+      log.debug(
+        `No pull request associated with comment ${context.issue()} - quitting`
+      );
+      return;
+    }
+
+    if (pr.data.state !== "open") {
+      log.debug(
+        `Pull request associated with comment ${context.issue()} is not open - quitting`
+      );
       return;
     }
 
