@@ -25,7 +25,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     # Should be inverse of `if` below
-    if: "!((github.event_name == 'pull_request' && (github.event.action == 'synchronize' || (github.event.action == 'closed' && github.event.pull_request.merged))) || (startsWith(github.event_name, 'issue_comment') && (startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/deploy'))))"
+    if: "(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify')))"
     steps:
     # These tasks do not actually need a copy of the repository because it only performs automation tasks with the GitHub API
     # - uses: actions/checkout@master
@@ -40,7 +40,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     # Should be inverse of `if` above
-    if: "((github.event_name == 'pull_request' && (github.event.action == 'synchronize' || (github.event.action == 'closed' && github.event.pull_request.merged))) || (startsWith(github.event_name, 'issue_comment') && (startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/deploy'))))"
+    if: "!(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify')))"
     steps:
     - uses: actions/checkout@master
     - uses: unbounce/actions-deploy@master
