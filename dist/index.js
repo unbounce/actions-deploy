@@ -26530,7 +26530,7 @@ const handlePrMerged = async (context, pr) => {
                 // Re-throw so that first deployment is marked as "error"
                 throw e;
             }
-            const previousVersion = await git_1.getShortSha(deployment.sha);
+            const previousVersion = await git_1.getShortSha(previousDeployment.sha);
             await comment.append(comment_1.warning(`Rolling back ${comment_1.code(environment)} to ${previousVersion}...`));
             await createDeploymentAndSetStatus(context, previousVersion, environment, { pr: utils_1.deploymentPullRequestNumber(previousDeployment) }, async () => {
                 await deploy(comment, previousVersion, environment);

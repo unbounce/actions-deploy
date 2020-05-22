@@ -237,7 +237,7 @@ const handlePrMerged = async (
           throw e;
         }
 
-        const previousVersion = await getShortSha(deployment.sha);
+        const previousVersion = await getShortSha(previousDeployment.sha);
         await comment.append(
           warning(`Rolling back ${code(environment)} to ${previousVersion}...`)
         );
