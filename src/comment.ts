@@ -4,6 +4,7 @@ import type { Context } from "probot";
 export const warning = (text: string) => `:warning: ${text}`;
 export const error = (text: string) => `:x: ${text}`;
 export const success = (text: string) => `:white_check_mark: ${text}`;
+export const info = (text: string) => `:information_source: ${text}`;
 
 export const details = (summary: string, body: string) => {
   return `<details>\n<summary>${summary}</summary>\n\n${body}\n\n</details>`;

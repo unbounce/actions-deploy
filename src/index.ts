@@ -29,6 +29,7 @@ import {
   logToDetails,
   warning,
   success,
+  info,
 } from "./comment";
 
 import { PullRequest } from "./types";
@@ -205,6 +206,7 @@ const handlePrMerged = async (
   await comment.append(
     mention(`Deploying to ${code(productionEnvironment)}...`)
   );
+
   await setup(comment);
   const version = await getShortSha(deployment.sha);
   const environment = productionEnvironment;
@@ -295,11 +297,13 @@ const handleQACommand = async (context: Context, pr: PullRequest) => {
           comment.separator();
           await comment.append([
             success("Done"),
-            `Comment ${code("/passed-qa")} or ${code(
-              "/failed-qa"
-            )} once you have verified the changes. Merging this pull request will deploy it to ${code(
-              config.productionEnvironment
-            )}.`,
+            info(
+              `Comment ${code("/passed-qa")} or ${code(
+                "/failed-qa"
+              )} once you have verified the changes. Merging this pull request will deploy it to ${code(
+                config.productionEnvironment
+              )}.`
+            ),
           ]);
         } catch (e) {
           await setCommitStatus(context, pr, "failure");

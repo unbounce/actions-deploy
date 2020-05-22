@@ -1741,6 +1741,7 @@ const parsimmon_1 = __importDefault(__webpack_require__(270));
 exports.warning = (text) => `:warning: ${text}`;
 exports.error = (text) => `:x: ${text}`;
 exports.success = (text) => `:white_check_mark: ${text}`;
+exports.info = (text) => `:information_source: ${text}`;
 exports.details = (summary, body) => {
     return `<details>\n<summary>${summary}</summary>\n\n${body}\n\n</details>`;
 };
@@ -26565,7 +26566,7 @@ const handleQACommand = async (context, pr) => {
                 comment.separator();
                 await comment.append([
                     comment_1.success("Done"),
-                    `Comment ${comment_1.code("/passed-qa")} or ${comment_1.code("/failed-qa")} once you have verified the changes. Merging this pull request will deploy it to ${comment_1.code(config_1.config.productionEnvironment)}.`,
+                    comment_1.info(`Comment ${comment_1.code("/passed-qa")} or ${comment_1.code("/failed-qa")} once you have verified the changes. Merging this pull request will deploy it to ${comment_1.code(config_1.config.productionEnvironment)}.`),
                 ]);
             }
             catch (e) {
