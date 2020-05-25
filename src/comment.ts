@@ -1,4 +1,10 @@
 import Parsimmon from "parsimmon";
+import type { Context } from "probot";
+
+export const warning = (text: string) => `:warning: ${text}`;
+export const error = (text: string) => `:x: ${text}`;
+export const success = (text: string) => `:white_check_mark: ${text}`;
+export const info = (text: string) => `:information_source: ${text}`;
 
 export const details = (summary: string, body: string) => {
   return `<details>\n<summary>${summary}</summary>\n\n${body}\n\n</details>`;
@@ -84,3 +90,58 @@ export const logToDetails = (log: string) => {
     return codeBlock(log);
   }
 };
+
+export class Comment {
+  private id?: number;
+  private lines: string[] = [];
+  private footer: string[] = ["---"];
+
+  constructor(
+    private context: Context,
+    private issueNumber: number,
+    footer?: string | string[]
+  ) {
+    if (footer) {
+      this.footer = this.footer.concat(footer);
+    }
+  }
+
+  async append(lines: string | string[]) {
+    this.lines = this.lines.concat(lines);
+    await this.apply(this.lines);
+  }
+
+  async ephemeral(ephemeralLines: string | string[]) {
+    await this.apply(this.lines.concat(ephemeralLines));
+  }
+
+  separator() {
+    this.lines.push("---");
+  }
+
+  private apply(lines: string[]) {
+    if (typeof this.id === "undefined") {
+      return this.create(lines);
+    } else {
+      return this.update(this.id, lines);
+    }
+  }
+
+  private update(id: number, lines: string[]) {
+    const params = this.context.repo({
+      comment_id: id,
+      body: lines.concat(this.footer).join("\n\n"),
+    });
+    return this.context.github.issues.updateComment(params);
+  }
+
+  private async create(lines: string[]) {
+    const body = lines.concat(this.footer).join("\n\n");
+    const params = this.context.repo({
+      issue_number: this.issueNumber,
+      body,
+    });
+    const comment = await this.context.github.issues.createComment(params);
+    this.id = comment.data.id;
+  }
+}

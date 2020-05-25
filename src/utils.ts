@@ -94,6 +94,32 @@ export const findDeployment = async (context: Context, environment: string) => {
   }
 };
 
+export const findPreviousDeployment = async (
+  context: Context,
+  environment: string
+) => {
+  const deployments = await context.github.repos.listDeployments(
+    context.repo({ environment })
+  );
+  if (deployments.data.length > 1) {
+    const [latestDeployment, previousDeployment] = deployments.data;
+    // We're relying on the fact that deployments are returned in reverse order.
+    // This does not appear to be documented, and there is no way to ask this
+    // endpoint for the "latest" or "active" deployment, or to influence the
+    // ordering. To avoid fetching all deployments and ordering them here, this
+    // performs a simple check to see if the ordering is as we expect it and
+    // error otherwise.
+    //
+    // https://developer.github.com/v3/repos/deployments/#list-deployments
+    if (latestDeployment.id < previousDeployment.id) {
+      throw new Error("GitHub deployments were not returned in reverse order");
+    }
+    return previousDeployment;
+  } else {
+    return undefined;
+  }
+};
+
 export const findLastDeploymentForPullRequest = async (
   context: Context,
   prNumber: number
@@ -181,16 +207,15 @@ const errorMessage = (e: any) => {
 };
 
 export const handleError = async (
-  context: Context,
-  issueNumber: number,
+  existingComment: comment.Comment,
   text: string,
   e: Error
 ) => {
   const message = `${text}: ${comment.code(errorMessage(e))}`;
-  const body = [comment.mention(`${message} (${comment.runLink("Details")})`)];
+  const body = [comment.error(comment.mention(`${message}`))];
   if (e instanceof ShellError) {
     body.push(comment.logToDetails(e.output));
   }
-  await createComment(context, issueNumber, body);
+  await existingComment.append(body);
   error(message);
 };

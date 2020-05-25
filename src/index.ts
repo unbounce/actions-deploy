@@ -11,90 +11,147 @@ import {
   setDeploymentStatus,
   createDeployment,
   findDeployment,
+  findPreviousDeployment,
   environmentIsAvailable,
   deploymentPullRequestNumber,
   handleError,
   pullRequestHasBeenDeployed,
   findLastDeploymentForPullRequest,
 } from "./utils";
-import { debug, error } from "./logging";
+import * as log from "./logging";
 import { shell } from "./shell";
 import { getShortSha, checkoutPullRequest, updatePullRequest } from "./git";
-import * as comment from "./comment";
+import {
+  Comment,
+  mention,
+  code,
+  runLink,
+  logToDetails,
+  warning,
+  success,
+  info,
+} from "./comment";
 
 import { PullRequest } from "./types";
 
-const setup = () => {
-  return shell([
-    "echo ::group::Setup",
-    config.setupCommand,
-    "echo ::endgroup::",
-  ]);
-};
-
-const createDeploymentAndDeploy = async (
+const createDeploymentAndSetStatus = async (
   context: Context,
   version: string,
   environment: string,
   payload: object,
-  commands: string[]
+  f: () => Promise<any>
 ) => {
-  // Resources created as part of an Action can not trigger other actions, so we
-  // can't handle the deployment as part of `app.on('deployment')`
   const {
     data: { id },
   } = await createDeployment(context, version, environment, payload);
   try {
-    const env = {
-      VERSION: version,
-      ENVIRONMENT: environment,
-    };
-    const output = await shell(commands, env);
+    await f();
     await setDeploymentStatus(context, id, "success");
-    return output;
   } catch (e) {
     await setDeploymentStatus(context, id, "error");
+    // The error is not re-thrown here - it is handled within `f` and is only
+    // raised to this level so that the deployment can be marked as "error"
+  }
+};
+
+const setup = async (comment: Comment) => {
+  try {
+    await shell([
+      "echo ::group::Setup",
+      config.setupCommand,
+      "echo ::endgroup::",
+    ]);
+  } catch (e) {
+    await handleError(comment, `setup failed`, e);
     throw e;
   }
 };
 
-const runVerify = (version: string, environment: string) => {
-  const env = {
-    VERSION: version,
-    ENVIRONMENT: environment,
-  };
-  const commands = [
-    "echo ::group::Verify",
-    config.verifyCommand,
-    "echo ::endgroup::",
-  ];
-  return shell(commands, env);
-};
-
-const releaseDeployAndVerify = (
-  context: Context,
-  version: string,
-  environment: string,
-  ref: string
-) => {
-  return createDeploymentAndDeploy(
-    context,
-    version,
-    environment,
-    { pr: context.issue().number },
-    [
+const release = async (comment: Comment, version: string) => {
+  try {
+    comment.separator();
+    await comment.append(`Releasing ${version}...`);
+    const env = {
+      VERSION: version,
+    };
+    const commands = [
       "echo ::group::Release",
-      `export RELEASE_BRANCH=${ref}`,
       config.releaseCommand,
       "echo ::endgroup::",
+    ];
+    const output = await shell(commands, env);
+    await comment.append([
+      logToDetails(output),
+      success(`${version} was successfully released.`),
+    ]);
+  } catch (e) {
+    await handleError(comment, `releaseing ${version} failed`, e);
+    throw e;
+  }
+};
+
+const deploy = async (
+  comment: Comment,
+  version: string,
+  environment: string
+) => {
+  try {
+    comment.separator();
+    await comment.append(`Deploying ${version} to ${code(environment)}...`);
+    const env = {
+      VERSION: version,
+      ENVIRONMENT: environment,
+    };
+    const commands = [
       "echo ::group::Deploy",
       config.deployCommand,
       "echo ::endgroup::",
+    ];
+    const output = await shell(commands, env);
+    await comment.append([
+      logToDetails(output),
+      success(`${version} was successfully deployed to ${code(environment)}.`),
+    ]);
+  } catch (e) {
+    await handleError(
+      comment,
+      `deploying ${version} to ${code(environment)} failed`,
+      e
+    );
+    throw e;
+  }
+};
+
+const verify = async (
+  comment: Comment,
+  version: string,
+  environment: string
+) => {
+  try {
+    comment.separator();
+    await comment.append(`Verifying ${version} in ${code(environment)}...`);
+    const env = {
+      VERSION: version,
+      ENVIRONMENT: environment,
+    };
+    const commands = [
       "echo ::group::Verify",
       config.verifyCommand,
       "echo ::endgroup::",
-    ]
-  );
+    ];
+    const output = await shell(commands, env);
+    await comment.append([
+      logToDetails(output),
+      success(`${version} was successfully verified in ${code(environment)}.`),
+    ]);
+  } catch (e) {
+    await handleError(
+      comment,
+      `verifying ${version} in ${code(environment)} failed`,
+      e
+    );
+    throw e;
+  }
 };
 
 // If the PR was deployed to pre-production, then deploy it to production
@@ -106,14 +163,14 @@ const handlePrMerged = async (
   const deployment = await findDeployment(context, preProductionEnvironment);
 
   if (!deployment) {
-    debug(`No deployment found for ${preProductionEnvironment} - quitting`);
+    log.debug(`No deployment found for ${preProductionEnvironment} - quitting`);
     return;
   }
 
   const deployedPrNumber = deploymentPullRequestNumber(deployment);
 
   if (deployedPrNumber !== pr.number) {
-    debug(
+    log.debug(
       `${pr.number} was merged, but is not currently deployed to ${preProductionEnvironment} - quitting`
     );
     return;
@@ -121,11 +178,15 @@ const handlePrMerged = async (
 
   if (deployment.sha !== pr.head.sha) {
     const message = [
-      `️:warning: The deployment to ${preProductionEnvironment} was outdated, so I skipped deployment to ${productionEnvironment}.`,
-      comment.mention(
-        `, please check ${comment.code(
-          pr.base.ref
-        )} and deploy manually if necessary.`
+      warning(
+        `️The deployment to ${code(
+          preProductionEnvironment
+        )} was outdated, so I skipped deployment to ${code(
+          productionEnvironment
+        )}.`
+      ),
+      mention(
+        `, please check ${code(pr.base.ref)} and deploy manually if necessary.`
       ),
     ];
 
@@ -133,44 +194,69 @@ const handlePrMerged = async (
     return;
   }
 
-  debug(
+  log.debug(
     `${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`
   );
 
-  try {
-    const version = await getShortSha(deployment.sha);
-    const output = await createDeploymentAndDeploy(
-      context,
-      version,
-      productionEnvironment,
-      { pr: pr.number },
-      [
-        "echo ::group::Deploy",
-        config.deployCommand,
-        "echo ::endgroup::",
-        "echo ::group::Verify",
-        config.verifyCommand,
-        "echo ::endgroup::",
-      ]
-    );
-    const body = [
-      comment.mention(
-        `deployed ${version} to ${productionEnvironment} (${comment.runLink(
-          "Details"
-        )})`
-      ),
-      comment.logToDetails(output),
-    ];
+  const comment = new Comment(
+    context,
+    context.issue().number,
+    `(${runLink("Details")})`
+  );
+  await comment.append(
+    mention(`Deploying to ${code(productionEnvironment)}...`)
+  );
 
-    await createComment(context, pr.number, body);
-  } catch (e) {
-    await handleError(
-      context,
-      pr.number,
-      `deploy to ${productionEnvironment} failed`,
-      e
-    );
-  }
+  await setup(comment);
+  const version = await getShortSha(deployment.sha);
+  const environment = productionEnvironment;
+  await createDeploymentAndSetStatus(
+    context,
+    version,
+    environment,
+    { pr: pr.number },
+    async () => {
+      await deploy(comment, version, environment);
+      try {
+        await verify(comment, version, environment);
+      } catch (e) {
+        // Rollback
+        const previousDeployment = await findPreviousDeployment(
+          context,
+          environment
+        );
+        if (!previousDeployment) {
+          await comment.append(
+            warning(
+              `Unable to find previous deployment for ${code(
+                environment
+              )} to roll back to.`
+            )
+          );
+          // Re-throw so that first deployment is marked as "error"
+          throw e;
+        }
+
+        const previousVersion = await getShortSha(previousDeployment.sha);
+        await comment.append(
+          warning(`Rolling back ${code(environment)} to ${previousVersion}...`)
+        );
+        await createDeploymentAndSetStatus(
+          context,
+          previousVersion,
+          environment,
+          { pr: deploymentPullRequestNumber(previousDeployment) },
+          async () => {
+            await deploy(comment, previousVersion, environment);
+            await verify(comment, previousVersion, environment);
+          }
+        );
+        // Re-throw so that first deployment is marked as "error"
+        throw e;
+      }
+      await comment.append(success("Done"));
+    }
+  );
 };
 
 const handleQACommand = async (context: Context, pr: PullRequest) => {
@@ -178,53 +264,60 @@ const handleQACommand = async (context: Context, pr: PullRequest) => {
   const deployment = await findDeployment(context, environment);
 
   if (environmentIsAvailable(context, deployment)) {
+    await checkoutPullRequest(pr);
+    const comment = new Comment(
+      context,
+      context.issue().number,
+      `(${runLink("Details")})`
+    );
+    await comment.append(`Running ${code("/qa")}...`);
+    await setup(comment);
     try {
-      await checkoutPullRequest(pr);
-      await setup();
-      try {
-        await updatePullRequest(pr);
-      } catch (e) {
-        await handleError(
-          context,
-          context.issue().number,
-          `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`,
-          e
-        );
-        return;
-      }
-      const version = await getShortSha("HEAD");
-      const { ref } = pr.head;
-      const output = await releaseDeployAndVerify(
-        context,
-        version,
-        environment,
-        ref
-      );
-      const body = [
-        comment.mention(
-          `deployed ${version} to ${environment} (${comment.runLink(
-            "Details"
-          )})`
-        ),
-        comment.logToDetails(output),
-      ];
-      await createComment(context, pr.number, body);
+      await updatePullRequest(pr);
     } catch (e) {
-      await Promise.all([
-        handleError(
-          context,
-          context.issue().number,
-          `release and deploy to ${environment} failed`,
-          e
-        ),
-        setCommitStatus(context, pr, "failure"),
-      ]);
+      await handleError(
+        comment,
+        `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`,
+        e
+      );
+      return;
     }
+    const version = await getShortSha("HEAD");
+
+    await createDeploymentAndSetStatus(
+      context,
+      version,
+      environment,
+      { pr: pr.number },
+      async () => {
+        try {
+          await release(comment, version);
+          await deploy(comment, version, environment);
+          await verify(comment, version, environment);
+          comment.separator();
+          await comment.append([
+            success("Done"),
+            info(
+              `Comment ${code("/passed-qa")} or ${code(
+                "/failed-qa"
+              )} once you have verified the changes. Merging this pull request will deploy it to ${code(
+                config.productionEnvironment
+              )}.`
+            ),
+          ]);
+        } catch (e) {
+          await setCommitStatus(context, pr, "failure");
+          throw e;
+        }
+      }
+    );
   } else {
     const prNumber = deploymentPullRequestNumber(deployment);
-    const message = `#${prNumber} is currently deployed to ${environment}. It must be merged or closed before this pull request can be deployed.`;
-    await createComment(context, pr.number, [comment.mention(message)]);
-    error(message);
+    const message = `#${prNumber} is currently deployed to ${code(
+      environment
+    )}. It must be merged or closed before this pull request can be deployed.`;
+    await createComment(context, pr.number, [mention(message)]);
+    log.error(message);
   }
 };
 
@@ -241,7 +334,7 @@ const invalidateDeployedPullRequest = async (
   const deployedPrNumber = deploymentPullRequestNumber(deployment);
   if (typeof deployedPrNumber === "number") {
     if (deployedPrNumber === prNumber) {
-      debug(
+      log.debug(
         `This pull request is currently deployed to ${environment} - nothing to do`
       );
     } else {
@@ -250,34 +343,34 @@ const invalidateDeployedPullRequest = async (
       );
       // If bases are the same, invalidate it
       if (baseRef === deployedPr.data.base.ref) {
-        debug(
+        log.debug(
           `The pull request currently deployed to ${environment} (#${deployedPr}) has the same base (${baseRef}) - invalidating it`
         );
         const body = [
           `This pull request is no longer up-to-date with ${baseRef} (because #${prNumber} was just merged, which changed ${baseRef}).`,
-          `Run ${comment.code(
-            "/qa"
-          )} to redeploy your changes to ${environment} or ${comment.code(
+          `Run ${code("/qa")} to redeploy your changes to ${code(
+            environment
+          )} or ${code(
             "/skip-qa"
           )} if you want to ignore the changes in ${baseRef}.`,
-          `Note that using ${comment.code(
+          `Note that using ${code(
             "/skip-qa"
-          )} will cause the new changes in ${baseRef} to be excluded when this pull request is merged, and they will not be deployed to ${
+          )} will cause the new changes in ${baseRef} to be excluded when this pull request is merged, and they will not be deployed to ${code(
             config.productionEnvironment
-          }.`,
+          )}.`,
         ].join(" ");
         await Promise.all([
           setCommitStatus(context, deployedPr.data, "pending"),
           createComment(context, deployedPrNumber, body),
         ]);
       } else {
-        debug(
+        log.debug(
           `The pull request currently deployed to ${environment} (#${deployedPr}) has a different base (${deployedPr.data.base.ref} != ${baseRef}) - nothing to do`
         );
       }
     }
   } else {
-    debug(
+    log.debug(
       `No pull request currently deployed to ${environment} - nothing to do`
     );
   }
@@ -291,7 +384,9 @@ const resetPreProductionDeployment = async (
   const { productionEnvironment, preProductionEnvironment } = config;
 
   if (productionEnvironment === preProductionEnvironment) {
-    debug("Production and pre-production environments are the same - quitting");
+    log.debug(
+      "Production and pre-production environments are the same - quitting"
+    );
     return;
   }
 
@@ -301,33 +396,43 @@ const resetPreProductionDeployment = async (
   const deployedPrNumber = deploymentPullRequestNumber(deployment);
 
   if (deployedPrNumber !== prNumber) {
-    debug(
+    log.debug(
       `PR ${prNumber} is not currently deployed to ${preProductionEnvironment} - nothing to do`
     );
     return;
   }
 
   if (!prodDeployment) {
-    debug(`No ${productionEnvironment} deployment found - quitting`);
+    log.debug(`No ${productionEnvironment} deployment found - quitting`);
     return;
   }
 
+  const comment = new Comment(
+    context,
+    context.issue().number,
+    `(${runLink("Details")})`
+  );
   const version = await getShortSha(prodDeployment.sha);
-  const output = await createDeploymentAndDeploy(
+  const environment = preProductionEnvironment;
+
+  await createDeploymentAndSetStatus(
     context,
     version,
-    preProductionEnvironment,
+    environment,
     { pr: context.issue().number },
-    ["echo ::group::Deploy", config.deployCommand, "echo ::endgroup::"]
+    async () => {
+      await deploy(comment, version, environment);
+      await verify(comment, version, environment);
+    }
   );
-  const body = [
-    `Reset ${preProductionEnvironment} to version ${version} from ${productionEnvironment} (${comment.runLink(
-      "Details"
-    )}).`,
-    comment.logToDetails(output),
-  ];
 
-  await createComment(context, prNumber, body);
+  await comment.append(
+    success(
+      `Reset ${code(
+        preProductionEnvironment
+      )} to version ${version} from ${code(productionEnvironment)}.`
+    )
+  );
 };
 
 const updateOutdatedDeployment = async (
@@ -340,7 +445,7 @@ const updateOutdatedDeployment = async (
   let deployedPr;
 
   if (!deployment) {
-    debug(`No deployment found for ${preProductionEnvironment} - quitting`);
+    log.debug(`No deployment found for ${preProductionEnvironment} - quitting`);
     return;
   }
 
@@ -353,24 +458,24 @@ const updateOutdatedDeployment = async (
 
     deployedPr = prResponse.data;
   } catch (ex) {
-    debug(`Failed to fetch PR data for #${deployedPrNumber}`);
+    log.debug(`Failed to fetch PR data for #${deployedPrNumber}`);
   }
 
   if (!deployedPr) {
-    debug(
+    log.debug(
       `Could not find PR associated with ${preProductionEnvironment} deployment - quitting`
     );
     return;
   }
 
   if (deployedPr.number !== pr.number) {
-    debug(
+    log.debug(
       `PR synchronize event is unrelated to ${preProductionEnvironment} deployment - nothing to do (${pr.number} synchronized vs ${deployedPr.number} deployed)`
     );
     return;
   }
 
-  debug(
+  log.debug(
     `Re-deploying ${deployedPr.number} to ${preProductionEnvironment} with new commits...`
   );
 
@@ -390,48 +495,47 @@ const handleVerifyCommand = async (
 
   if (!deployment) {
     await createComment(context, context.issue().number, [
-      `I wasn't able to find a deployment for ${environment}`,
+      `I wasn't able to find a deployment for ${code(environment)} to verify.`,
     ]);
     return;
   }
 
   await checkoutPullRequest(pr);
-  await setup();
+
+  const comment = new Comment(
+    context,
+    context.issue().number,
+    `(${runLink("Details")})`
+  );
+  await comment.append(`Running ${code(`/verify ${environment}`)}...`);
+
+  await setup(comment);
 
   try {
     const version = await getShortSha(deployment.sha);
-    const output = await runVerify(version, environment);
-    const body: string[] = [];
+    await verify(comment, version, environment);
 
     if (environment === config.preProductionEnvironment) {
       if (deploymentPullRequestNumber(deployment) === pr.number) {
         await setDeploymentStatus(context, deployment.id, "success");
       } else {
-        body.push(
-          `:warning: This pull request is not currently deployed to ${environment}. You can use ${comment.code(
-            "/qa"
-          )} to deploy it to ${environment}.`
+        await comment.append(
+          warning(
+            `This pull request is not currently deployed to ${code(
+              environment
+            )}. You can use ${code("/qa")} to deploy it to ${code(
+              environment
+            )}.`
+          )
         );
       }
     }
 
-    await createComment(
-      context,
-      context.issue().number,
-      body.concat([
-        comment.mention(
-          `verification of ${environment} completed successfully (${comment.runLink(
-            "Details"
-          )})`
-        ),
-        comment.logToDetails(output),
-      ])
-    );
+    await comment.append(success("Done"));
   } catch (e) {
     await handleError(
-      context,
-      pr.number,
-      `verification of ${environment} failed`,
+      comment,
+      `verification of ${code(environment)} failed`,
       e
     );
   }
@@ -443,9 +547,6 @@ const handleDeployCommand = async (
   providedEnvironment?: string,
   providedVersion?: string
 ) => {
-  await checkoutPullRequest(pr);
-  await setup();
-
   const environment = providedEnvironment || config.preProductionEnvironment;
   const deployment = await findLastDeploymentForPullRequest(context, pr.number);
 
@@ -456,43 +557,40 @@ const handleDeployCommand = async (
     return;
   }
 
+  await checkoutPullRequest(pr);
+
   const deploymentVersion = await getShortSha(deployment.sha);
   const version = providedVersion || deploymentVersion;
+  const comment = new Comment(
+    context,
+    context.issue().number,
+    `(${runLink("Details")})`
+  );
+  await comment.append(
+    `Running ${code(`/deploy ${environment} ${version}`)}...`
+  );
 
-  try {
-    const output = await createDeploymentAndDeploy(
-      context,
-      version,
-      environment,
-      { pr: pr.number },
-      [
-        "echo ::group::Deploy",
-        config.deployCommand,
-        "echo ::endgroup::",
-        "echo ::group::Verify",
-        config.verifyCommand,
-        "echo ::endgroup::",
-      ]
-    );
+  await setup(comment);
 
-    const body = [
-      comment.mention(
-        `deployed ${version} to ${environment} (${comment.runLink("Details")})`
-      ),
-      comment.logToDetails(output),
-    ];
-
-    await createComment(context, pr.number, body);
-  } catch (e) {
-    await handleError(context, pr.number, `deploy to ${environment} failed`, e);
-  }
+  await createDeploymentAndSetStatus(
+    context,
+    version,
+    environment,
+    { pr: pr.number },
+    async () => {
+      await release(comment, version);
+      await deploy(comment, version, environment);
+      await verify(comment, version, environment);
+      await comment.append(success("Done"));
+    }
+  );
 };
 
 const commentPullRequestNotDeployed = (context: Context) => {
   return createComment(context, context.issue().number, [
-    `This pull request has not been deployed yet. You can use ${comment.code(
+    `This pull request has not been deployed yet. You can use ${code(
       "/qa"
-    )} to deploy it to ${config.preProductionEnvironment} or ${comment.code(
+    )} to deploy it to ${code(config.preProductionEnvironment)} or ${code(
       "/skip-qa"
     )} to not deploy this pull request.`,
   ]);
@@ -516,7 +614,16 @@ const probot = (app: Application) => {
     const pr = await context.github.pulls.get(context.issue());
 
     if (!pr) {
-      debug(`No pull request associated with comment ${context.issue()}`);
+      log.debug(
+        `No pull request associated with comment ${context.issue()} - quitting`
+      );
+      return;
+    }
+
+    if (pr.data.state !== "open") {
+      log.debug(
+        `Pull request associated with comment ${context.issue()} is not open - quitting`
+      );
       return;
     }
 
@@ -575,7 +682,7 @@ const probot = (app: Application) => {
       }
 
       default: {
-        debug("Unknown command", context);
+        log.debug("Unknown command", context);
       }
     }
   });

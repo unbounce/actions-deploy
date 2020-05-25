@@ -25,15 +25,11 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     # Should be inverse of `if` below
-    if: "!((github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged) || (startsWith(github.event_name, 'issue_comment') && (startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/deploy'))))"
+    if: "(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify')))"
     steps:
     # These tasks do not actually need a copy of the repository because it only performs automation tasks with the GitHub API
     # - uses: actions/checkout@master
     - uses: unbounce/actions-deploy@master
-      with:
-        release: make release # or: npm run release
-        deploy: make deploy # or: npm run deploy --environment "$ENVIRONMENT" --version "$VERSION"
-        verify: make end-to-end-tests
 
   # Deployment tasks - this is where the actual deployment takes place
   # Runs on self-hosted runners so that it can have access to AWS resources for deployments
@@ -44,14 +40,15 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     # Should be inverse of `if` above
-    if: "((github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged) || (startsWith(github.event_name, 'issue_comment') && (startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/deploy'))))"
+    if: "!(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify')))"
     steps:
     - uses: actions/checkout@master
     - uses: unbounce/actions-deploy@master
       with:
+        setup: make deps # or: npm ci
         release: make release # or: npm run release
         deploy: make deploy # or: npm run deploy --environment "$ENVIRONMENT" --version "$VERSION"
-        verify: make end-to-end-tests
+        verify: make end-to-end-tests # or: npm run end-to-end-tests
 ```
 
 The main way to interact with this automation is to comment `/qa` on a pull
