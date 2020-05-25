@@ -1,6 +1,8 @@
 import Parsimmon from "parsimmon";
 import type { Context } from "probot";
 
+import { config } from "./config";
+
 export const warning = (text: string) => `:warning: ${text}`;
 export const error = (text: string) => `:x: ${text}`;
 export const success = (text: string) => `:white_check_mark: ${text}`;
@@ -24,6 +26,8 @@ export const code = (body: string) => {
   const tick = "`";
   return `${tick}${body}${tick}`;
 };
+
+export const quote = (body: string) => `> ${body}`;
 
 export const runLink = (text: string) => {
   const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}?check_suite_focus=true`;
@@ -94,16 +98,14 @@ export const logToDetails = (log: string) => {
 export class Comment {
   private id?: number;
   private lines: string[] = [];
-  private footer: string[] = ["---"];
+  private header: string[] = [];
+  private footer: string[];
 
-  constructor(
-    private context: Context,
-    private issueNumber: number,
-    footer?: string | string[]
-  ) {
-    if (footer) {
-      this.footer = this.footer.concat(footer);
+  constructor(private context: Context, private issueNumber: number) {
+    if (config.componentName) {
+      this.header = [quote(info(code(config.componentName)))];
     }
+    this.footer = [`---`, `(${runLink("Details")})`];
   }
 
   async append(lines: string | string[]) {
@@ -130,13 +132,13 @@ export class Comment {
   private update(id: number, lines: string[]) {
     const params = this.context.repo({
       comment_id: id,
-      body: lines.concat(this.footer).join("\n\n"),
+      body: [...this.header, ...lines, ...this.footer].join("\n\n"),
     });
     return this.context.github.issues.updateComment(params);
   }
 
   private async create(lines: string[]) {
-    const body = lines.concat(this.footer).join("\n\n");
+    const body = [...this.header, ...lines, ...this.footer].join("\n\n");
     const params = this.context.repo({
       issue_number: this.issueNumber,
       body,

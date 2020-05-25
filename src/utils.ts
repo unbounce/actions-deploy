@@ -11,6 +11,16 @@ import {
   CommitStatusState,
 } from "./types";
 
+export const environmentWithComponent = (environment: string) => {
+  if (config.isComponent) {
+    return `${environment}[${config.componentName}]`;
+  } else {
+    return environment;
+  }
+};
+
+export const componentLabel = () => `actions-deploy/${config.componentName}`;
+
 // From https://github.com/probot/commands/blob/master/index.js
 export const commandMatches = (context: Context, match: string): boolean => {
   // tslint:disable-next-line:no-shadowed-variable
@@ -71,7 +81,7 @@ export const setCommitStatus = async (
 
 export const findDeployment = async (context: Context, environment: string) => {
   const deployments = await context.github.repos.listDeployments(
-    context.repo({ environment })
+    context.repo({ environment: environmentWithComponent(environment) })
   );
   if (deployments.data.length === 1) {
     return deployments.data[0];
@@ -99,7 +109,7 @@ export const findPreviousDeployment = async (
   environment: string
 ) => {
   const deployments = await context.github.repos.listDeployments(
-    context.repo({ environment })
+    context.repo({ environment: environmentWithComponent(environment) })
   );
   if (deployments.data.length > 1) {
     const [latestDeployment, previousDeployment] = deployments.data;
@@ -169,7 +179,7 @@ export const createDeployment = (
       payload: JSON.stringify(payload),
       required_contexts: [],
       auto_merge: false,
-      environment,
+      environment: environmentWithComponent(environment),
       ref,
     })
   );

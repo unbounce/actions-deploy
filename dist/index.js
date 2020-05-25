@@ -1738,6 +1738,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const parsimmon_1 = __importDefault(__webpack_require__(270));
+const config_1 = __webpack_require__(641);
 exports.warning = (text) => `:warning: ${text}`;
 exports.error = (text) => `:x: ${text}`;
 exports.success = (text) => `:white_check_mark: ${text}`;
@@ -1757,6 +1758,7 @@ exports.code = (body) => {
     const tick = "`";
     return `${tick}${body}${tick}`;
 };
+exports.quote = (body) => `> ${body}`;
 exports.runLink = (text) => {
     const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}?check_suite_focus=true`;
     return `[${text}](${url})`;
@@ -1812,14 +1814,15 @@ exports.logToDetails = (log) => {
     }
 };
 class Comment {
-    constructor(context, issueNumber, footer) {
+    constructor(context, issueNumber) {
         this.context = context;
         this.issueNumber = issueNumber;
         this.lines = [];
-        this.footer = ["---"];
-        if (footer) {
-            this.footer = this.footer.concat(footer);
+        this.header = [];
+        if (config_1.config.componentName) {
+            this.header = [exports.quote(exports.info(exports.code(config_1.config.componentName)))];
         }
+        this.footer = [`---`, `(${exports.runLink("Details")})`];
     }
     async append(lines) {
         this.lines = this.lines.concat(lines);
@@ -1842,12 +1845,12 @@ class Comment {
     update(id, lines) {
         const params = this.context.repo({
             comment_id: id,
-            body: lines.concat(this.footer).join("\n\n"),
+            body: [...this.header, ...lines, ...this.footer].join("\n\n"),
         });
         return this.context.github.issues.updateComment(params);
     }
     async create(lines) {
-        const body = lines.concat(this.footer).join("\n\n");
+        const body = [...this.header, ...lines, ...this.footer].join("\n\n");
         const params = this.context.repo({
             issue_number: this.issueNumber,
             body,
@@ -26512,7 +26515,7 @@ const handlePrMerged = async (context, pr) => {
         return;
     }
     log.debug(`${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`);
-    const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
+    const comment = new comment_1.Comment(context, context.issue().number);
     await comment.append(comment_1.mention(`Deploying to ${comment_1.code(productionEnvironment)}...`));
     await setup(comment);
     const version = await git_1.getShortSha(deployment.sha);
@@ -26547,7 +26550,7 @@ const handleQACommand = async (context, pr) => {
     const deployment = await utils_1.findDeployment(context, environment);
     if (utils_1.environmentIsAvailable(context, deployment)) {
         await git_1.checkoutPullRequest(pr);
-        const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
+        const comment = new comment_1.Comment(context, context.issue().number);
         await comment.append(`Running ${comment_1.code("/qa")}...`);
         await setup(comment);
         try {
@@ -26639,7 +26642,7 @@ const resetPreProductionDeployment = async (context) => {
         log.debug(`No ${productionEnvironment} deployment found - quitting`);
         return;
     }
-    const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
+    const comment = new comment_1.Comment(context, context.issue().number);
     const version = await git_1.getShortSha(prodDeployment.sha);
     const environment = preProductionEnvironment;
     await createDeploymentAndSetStatus(context, version, environment, { pr: context.issue().number }, async () => {
@@ -26689,7 +26692,7 @@ const handleVerifyCommand = async (context, pr, providedEnvironment) => {
         return;
     }
     await git_1.checkoutPullRequest(pr);
-    const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
+    const comment = new comment_1.Comment(context, context.issue().number);
     await comment.append(`Running ${comment_1.code(`/verify ${environment}`)}...`);
     await setup(comment);
     try {
@@ -26721,7 +26724,7 @@ const handleDeployCommand = async (context, pr, providedEnvironment, providedVer
     await git_1.checkoutPullRequest(pr);
     const deploymentVersion = await git_1.getShortSha(deployment.sha);
     const version = providedVersion || deploymentVersion;
-    const comment = new comment_1.Comment(context, context.issue().number, `(${comment_1.runLink("Details")})`);
+    const comment = new comment_1.Comment(context, context.issue().number);
     await comment.append(`Running ${comment_1.code(`/deploy ${environment} ${version}`)}...`);
     await setup(comment);
     await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
@@ -26747,6 +26750,11 @@ const probot = (app) => {
         const pr = await context.github.pulls.get(context.issue());
         await utils_1.setCommitStatus(context, pr.data, "pending");
     });
+    app.on(["pull_request.opened", "pull_request.synchronize"], async (context) => {
+        if (config_1.config.isComponent) {
+            await context.github.issues.addLabels(context.issue({ labels: [utils_1.componentLabel()] }));
+        }
+    });
     app.on(["issue_comment.created", "pull_request.opened"], async (context) => {
         const pr = await context.github.pulls.get(context.issue());
         if (!pr) {
@@ -26755,6 +26763,11 @@ const probot = (app) => {
         }
         if (pr.data.state !== "open") {
             log.debug(`Pull request associated with comment ${context.issue()} is not open - quitting`);
+            return;
+        }
+        const labels = pr.data.labels.map((l) => l.name);
+        if (config_1.config.isComponent && !labels.includes(utils_1.componentLabel())) {
+            log.debug(`Pull request does not contain changes for ${config_1.config.componentName} - quitting`);
             return;
         }
         switch (true) {
@@ -37541,6 +37554,15 @@ const config_1 = __webpack_require__(641);
 const comment = __importStar(__webpack_require__(38));
 const shell_1 = __webpack_require__(798);
 const logging_1 = __webpack_require__(376);
+exports.environmentWithComponent = (environment) => {
+    if (config_1.config.isComponent) {
+        return `${environment}[${config_1.config.componentName}]`;
+    }
+    else {
+        return environment;
+    }
+};
+exports.componentLabel = () => `actions-deploy/${config_1.config.componentName}`;
 // From https://github.com/probot/commands/blob/master/index.js
 exports.commandMatches = (context, match) => {
     // tslint:disable-next-line:no-shadowed-variable
@@ -37583,7 +37605,7 @@ exports.setCommitStatus = async (context, pr, state) => {
     }
 };
 exports.findDeployment = async (context, environment) => {
-    const deployments = await context.github.repos.listDeployments(context.repo({ environment }));
+    const deployments = await context.github.repos.listDeployments(context.repo({ environment: exports.environmentWithComponent(environment) }));
     if (deployments.data.length === 1) {
         return deployments.data[0];
     }
@@ -37607,7 +37629,7 @@ exports.findDeployment = async (context, environment) => {
     }
 };
 exports.findPreviousDeployment = async (context, environment) => {
-    const deployments = await context.github.repos.listDeployments(context.repo({ environment }));
+    const deployments = await context.github.repos.listDeployments(context.repo({ environment: exports.environmentWithComponent(environment) }));
     if (deployments.data.length > 1) {
         const [latestDeployment, previousDeployment] = deployments.data;
         // We're relying on the fact that deployments are returned in reverse order.
@@ -37647,7 +37669,7 @@ exports.createDeployment = (context, ref, environment, payload) => context.githu
     payload: JSON.stringify(payload),
     required_contexts: [],
     auto_merge: false,
-    environment,
+    environment: exports.environmentWithComponent(environment),
     ref,
 }));
 exports.deploymentPullRequestNumber = (deployment) => JSON.parse(deployment ? deployment.payload : "{}")
@@ -58912,6 +58934,8 @@ const input = (name) => {
     return value;
 };
 exports.config = {
+    isComponent: "ACTIONS_DEPLOY_NAME" in process.env,
+    componentName: process.env[`ACTIONS_DEPLOY_NAME`],
     statusCheckContext: "QA",
     productionEnvironment: input("production-environment"),
     preProductionEnvironment: input("pre-production-environment"),

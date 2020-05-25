@@ -6,6 +6,7 @@ import { config } from "./config";
 import {
   commandMatches,
   commandParameters,
+  componentLabel,
   createComment,
   setCommitStatus,
   setDeploymentStatus,
@@ -25,7 +26,6 @@ import {
   Comment,
   mention,
   code,
-  runLink,
   logToDetails,
   warning,
   success,
@@ -198,11 +198,7 @@ const handlePrMerged = async (
     `${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`
   );
 
-  const comment = new Comment(
-    context,
-    context.issue().number,
-    `(${runLink("Details")})`
-  );
+  const comment = new Comment(context, context.issue().number);
   await comment.append(
     mention(`Deploying to ${code(productionEnvironment)}...`)
   );
@@ -265,11 +261,7 @@ const handleQACommand = async (context: Context, pr: PullRequest) => {
 
   if (environmentIsAvailable(context, deployment)) {
     await checkoutPullRequest(pr);
-    const comment = new Comment(
-      context,
-      context.issue().number,
-      `(${runLink("Details")})`
-    );
+    const comment = new Comment(context, context.issue().number);
     await comment.append(`Running ${code("/qa")}...`);
     await setup(comment);
     try {
@@ -407,11 +399,7 @@ const resetPreProductionDeployment = async (
     return;
   }
 
-  const comment = new Comment(
-    context,
-    context.issue().number,
-    `(${runLink("Details")})`
-  );
+  const comment = new Comment(context, context.issue().number);
   const version = await getShortSha(prodDeployment.sha);
   const environment = preProductionEnvironment;
 
@@ -502,11 +490,7 @@ const handleVerifyCommand = async (
 
   await checkoutPullRequest(pr);
 
-  const comment = new Comment(
-    context,
-    context.issue().number,
-    `(${runLink("Details")})`
-  );
+  const comment = new Comment(context, context.issue().number);
   await comment.append(`Running ${code(`/verify ${environment}`)}...`);
 
   await setup(comment);
@@ -561,11 +545,7 @@ const handleDeployCommand = async (
 
   const deploymentVersion = await getShortSha(deployment.sha);
   const version = providedVersion || deploymentVersion;
-  const comment = new Comment(
-    context,
-    context.issue().number,
-    `(${runLink("Details")})`
-  );
+  const comment = new Comment(context, context.issue().number);
   await comment.append(
     `Running ${code(`/deploy ${environment} ${version}`)}...`
   );
@@ -610,6 +590,17 @@ const probot = (app: Application) => {
     await setCommitStatus(context, pr.data, "pending");
   });
 
+  app.on(
+    ["pull_request.opened", "pull_request.synchronize"],
+    async (context) => {
+      if (config.isComponent) {
+        await context.github.issues.addLabels(
+          context.issue({ labels: [componentLabel()] })
+        );
+      }
+    }
+  );
+
   app.on(["issue_comment.created", "pull_request.opened"], async (context) => {
     const pr = await context.github.pulls.get(context.issue());
 
@@ -623,6 +614,14 @@ const probot = (app: Application) => {
     if (pr.data.state !== "open") {
       log.debug(
         `Pull request associated with comment ${context.issue()} is not open - quitting`
+      );
+      return;
+    }
+
+    const labels = pr.data.labels.map((l) => l.name);
+    if (config.isComponent && !labels.includes(componentLabel())) {
+      log.debug(
+        `Pull request does not contain changes for ${config.componentName} - quitting`
       );
       return;
     }
