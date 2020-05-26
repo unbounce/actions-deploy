@@ -108,6 +108,16 @@ export class Comment {
     this.footer = [`---`, `(${runLink("Details")})`];
   }
 
+  static async create(
+    context: Context,
+    issueNumber: number,
+    body: string | string[]
+  ) {
+    const comment = new Comment(context, issueNumber);
+    await comment.append(body);
+    return comment;
+  }
+
   async append(lines: string | string[]) {
     this.lines = this.lines.concat(lines);
     await this.apply(this.lines);

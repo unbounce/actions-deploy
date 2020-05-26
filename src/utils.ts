@@ -49,20 +49,6 @@ export const commandParameters = (context: Context): string[] => {
   }
 };
 
-export const createComment = (
-  context: Context,
-  issueNumber: number,
-  body0: string | string[]
-) => {
-  const body = typeof body0 === "string" ? body0 : body0.join("\n");
-  const issueComment = context.repo({
-    issue_number: issueNumber,
-    body,
-  });
-
-  return context.github.issues.createComment(issueComment);
-};
-
 export const setCommitStatus = async (
   context: Context,
   pr: PullRequest,

@@ -1824,6 +1824,11 @@ class Comment {
         }
         this.footer = [`---`, `(${exports.runLink("Details")})`];
     }
+    static async create(context, issueNumber, body) {
+        const comment = new Comment(context, issueNumber);
+        await comment.append(body);
+        return comment;
+    }
     async append(lines) {
         this.lines = this.lines.concat(lines);
         await this.apply(this.lines);
@@ -26511,7 +26516,7 @@ const handlePrMerged = async (context, pr) => {
             comment_1.warning(`️The deployment to ${comment_1.code(preProductionEnvironment)} was outdated, so I skipped deployment to ${comment_1.code(productionEnvironment)}.`),
             comment_1.mention(`, please check ${comment_1.code(pr.base.ref)} and deploy manually if necessary.`),
         ];
-        await utils_1.createComment(context, pr.number, message);
+        await comment_1.Comment.create(context, pr.number, message);
         return;
     }
     log.debug(`${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`);
@@ -26581,7 +26586,7 @@ const handleQACommand = async (context, pr) => {
     else {
         const prNumber = utils_1.deploymentPullRequestNumber(deployment);
         const message = `#${prNumber} is currently deployed ${utils_1.maybeComponentName()}to ${comment_1.code(environment)}. It must be merged or closed before this pull request can be deployed.`;
-        await utils_1.createComment(context, pr.number, [comment_1.mention(message)]);
+        await comment_1.Comment.create(context, pr.number, comment_1.mention(message));
         log.error(message);
     }
 };
@@ -26610,7 +26615,7 @@ const invalidateDeployedPullRequest = async (context) => {
                 ].join(" ");
                 await Promise.all([
                     utils_1.setCommitStatus(context, deployedPr.data, "pending"),
-                    utils_1.createComment(context, deployedPrNumber, body),
+                    comment_1.Comment.create(context, deployedPrNumber, body),
                 ]);
             }
             else {
@@ -26685,15 +26690,13 @@ const updateOutdatedDeployment = async (context, pr) => {
 const handleVerifyCommand = async (context, pr, providedEnvironment) => {
     const environment = providedEnvironment || config_1.config.preProductionEnvironment;
     const deployment = await utils_1.findDeployment(context, environment);
+    const comment = new comment_1.Comment(context, context.issue().number);
+    await comment.append(`Running ${comment_1.code(`/verify ${environment}`)}...`);
     if (!deployment) {
-        await utils_1.createComment(context, context.issue().number, [
-            `I wasn't able to find a deployment for ${comment_1.code(environment)} to verify.`,
-        ]);
+        await comment.append(`I wasn't able to find a deployment for ${comment_1.code(environment)} to verify.`);
         return;
     }
     await git_1.checkoutPullRequest(pr);
-    const comment = new comment_1.Comment(context, context.issue().number);
-    await comment.append(`Running ${comment_1.code(`/verify ${environment}`)}...`);
     await setup(comment);
     try {
         const version = await git_1.getShortSha(deployment.sha);
@@ -26715,8 +26718,10 @@ const handleVerifyCommand = async (context, pr, providedEnvironment) => {
 const handleDeployCommand = async (context, pr, providedEnvironment, providedVersion) => {
     const environment = providedEnvironment || config_1.config.preProductionEnvironment;
     const deployment = await utils_1.findLastDeploymentForPullRequest(context, pr.number);
+    const comment = new comment_1.Comment(context, context.issue().number);
     if (!deployment) {
-        await utils_1.createComment(context, context.issue().number, [
+        await comment.append([
+            `Running ${comment_1.code(`/deploy`)}...`,
             `I wasn't able to find the latest release for #${pr.number}`,
         ]);
         return;
@@ -26724,7 +26729,6 @@ const handleDeployCommand = async (context, pr, providedEnvironment, providedVer
     await git_1.checkoutPullRequest(pr);
     const deploymentVersion = await git_1.getShortSha(deployment.sha);
     const version = providedVersion || deploymentVersion;
-    const comment = new comment_1.Comment(context, context.issue().number);
     await comment.append(`Running ${comment_1.code(`/deploy ${environment} ${version}`)}...`);
     await setup(comment);
     await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
@@ -26735,9 +26739,7 @@ const handleDeployCommand = async (context, pr, providedEnvironment, providedVer
     });
 };
 const commentPullRequestNotDeployed = (context) => {
-    return utils_1.createComment(context, context.issue().number, [
-        `This pull request has not been deployed yet. You can use ${comment_1.code("/qa")} to deploy it to ${comment_1.code(config_1.config.preProductionEnvironment)} or ${comment_1.code("/skip-qa")} to not deploy this pull request.`,
-    ]);
+    return comment_1.Comment.create(context, context.issue().number, `This pull request has not been deployed yet. You can use ${comment_1.code("/qa")} to deploy it to ${comment_1.code(config_1.config.preProductionEnvironment)} or ${comment_1.code("/skip-qa")} to not deploy this pull request.`);
 };
 const probot = (app) => {
     // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
@@ -26772,10 +26774,7 @@ const probot = (app) => {
         }
         switch (true) {
             case utils_1.commandMatches(context, "skip-qa"): {
-                await Promise.all([
-                    utils_1.setCommitStatus(context, pr.data, "success"),
-                    utils_1.createComment(context, pr.data.number, ["Skipping QA 🤠"]),
-                ]);
+                await utils_1.setCommitStatus(context, pr.data, "success");
                 break;
             }
             case utils_1.commandMatches(context, "qa"): {
@@ -37583,14 +37582,6 @@ exports.commandParameters = (context) => {
     else {
         return [];
     }
-};
-exports.createComment = (context, issueNumber, body0) => {
-    const body = typeof body0 === "string" ? body0 : body0.join("\n");
-    const issueComment = context.repo({
-        issue_number: issueNumber,
-        body,
-    });
-    return context.github.issues.createComment(issueComment);
 };
 exports.setCommitStatus = async (context, pr, state) => {
     const { sha } = pr.head;

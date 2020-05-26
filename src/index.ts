@@ -7,7 +7,6 @@ import {
   commandMatches,
   commandParameters,
   componentLabel,
-  createComment,
   setCommitStatus,
   setDeploymentStatus,
   createDeployment,
@@ -211,7 +210,7 @@ const handlePrMerged = async (
       ),
     ];
 
-    await createComment(context, pr.number, message);
+    await Comment.create(context, pr.number, message);
     return;
   }
 
@@ -335,7 +334,7 @@ const handleQACommand = async (context: Context, pr: PullRequest) => {
     const message = `#${prNumber} is currently deployed ${maybeComponentName()}to ${code(
       environment
     )}. It must be merged or closed before this pull request can be deployed.`;
-    await createComment(context, pr.number, [mention(message)]);
+    await Comment.create(context, pr.number, mention(message));
     log.error(message);
   }
 };
@@ -380,7 +379,7 @@ const invalidateDeployedPullRequest = async (
         ].join(" ");
         await Promise.all([
           setCommitStatus(context, deployedPr.data, "pending"),
-          createComment(context, deployedPrNumber, body),
+          Comment.create(context, deployedPrNumber, body),
         ]);
       } else {
         log.debug(
@@ -510,17 +509,17 @@ const handleVerifyCommand = async (
   const environment = providedEnvironment || config.preProductionEnvironment;
   const deployment = await findDeployment(context, environment);
 
+  const comment = new Comment(context, context.issue().number);
+  await comment.append(`Running ${code(`/verify ${environment}`)}...`);
+
   if (!deployment) {
-    await createComment(context, context.issue().number, [
-      `I wasn't able to find a deployment for ${code(environment)} to verify.`,
-    ]);
+    await comment.append(
+      `I wasn't able to find a deployment for ${code(environment)} to verify.`
+    );
     return;
   }
 
   await checkoutPullRequest(pr);
-
-  const comment = new Comment(context, context.issue().number);
-  await comment.append(`Running ${code(`/verify ${environment}`)}...`);
 
   await setup(comment);
 
@@ -563,8 +562,11 @@ const handleDeployCommand = async (
   const environment = providedEnvironment || config.preProductionEnvironment;
   const deployment = await findLastDeploymentForPullRequest(context, pr.number);
 
+  const comment = new Comment(context, context.issue().number);
+
   if (!deployment) {
-    await createComment(context, context.issue().number, [
+    await comment.append([
+      `Running ${code(`/deploy`)}...`,
       `I wasn't able to find the latest release for #${pr.number}`,
     ]);
     return;
@@ -574,7 +576,7 @@ const handleDeployCommand = async (
 
   const deploymentVersion = await getShortSha(deployment.sha);
   const version = providedVersion || deploymentVersion;
-  const comment = new Comment(context, context.issue().number);
+
   await comment.append(
     `Running ${code(`/deploy ${environment} ${version}`)}...`
   );
@@ -596,13 +598,15 @@ const handleDeployCommand = async (
 };
 
 const commentPullRequestNotDeployed = (context: Context) => {
-  return createComment(context, context.issue().number, [
+  return Comment.create(
+    context,
+    context.issue().number,
     `This pull request has not been deployed yet. You can use ${code(
       "/qa"
     )} to deploy it to ${code(config.preProductionEnvironment)} or ${code(
       "/skip-qa"
-    )} to not deploy this pull request.`,
-  ]);
+    )} to not deploy this pull request.`
+  );
 };
 
 const probot = (app: Application) => {
@@ -657,10 +661,7 @@ const probot = (app: Application) => {
 
     switch (true) {
       case commandMatches(context, "skip-qa"): {
-        await Promise.all([
-          setCommitStatus(context, pr.data, "success"),
-          createComment(context, pr.data.number, ["Skipping QA 🤠"]),
-        ]);
+        await setCommitStatus(context, pr.data, "success");
         break;
       }
 
