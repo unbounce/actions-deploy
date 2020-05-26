@@ -26511,19 +26511,15 @@ const handlePrMerged = async (context, pr) => {
         log.debug(`${pr.number} was merged, but is not currently deployed to ${preProductionEnvironment} - quitting`);
         return;
     }
-    if (deployment.sha !== pr.head.sha) {
-        const message = [
-            comment_1.warning(`️The deployment to ${comment_1.code(preProductionEnvironment)} was outdated, so I skipped deployment to ${comment_1.code(productionEnvironment)}.`),
-            comment_1.mention(`, please check ${comment_1.code(pr.base.ref)} and deploy manually if necessary.`),
-        ];
-        await comment_1.Comment.create(context, pr.number, message);
-        return;
-    }
     log.debug(`${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`);
     const comment = new comment_1.Comment(context, context.issue().number);
+    const deploymentStatus = await utils_1.getDeploymentStatus(context, deployment.id);
+    if (deploymentStatus !== "success") {
+        await comment.append(comment_1.error(comment_1.mention(`The ${utils_1.maybeComponentName()}${comment_1.code(preProductionEnvironment)} deployment resulted in ${comment_1.code(deploymentStatus || "unknown")} - not deploying to ${comment_1.code(productionEnvironment)}.`)));
+    }
     await comment.append(comment_1.mention(`Deploying to ${comment_1.code(productionEnvironment)}...`));
     await setup(comment);
-    const version = await git_1.getShortSha(deployment.sha);
+    const version = deployment.ref;
     const environment = productionEnvironment;
     await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
         await deploy(comment, version, environment);
@@ -26538,7 +26534,7 @@ const handlePrMerged = async (context, pr) => {
                 // Re-throw so that first deployment is marked as "error"
                 throw e;
             }
-            const previousVersion = await git_1.getShortSha(previousDeployment.sha);
+            const previousVersion = previousDeployment.ref;
             await comment.append(comment_1.warning(`Rolling back ${utils_1.maybeComponentName()}${comment_1.code(environment)} to ${previousVersion}...`));
             await createDeploymentAndSetStatus(context, previousVersion, environment, { pr: utils_1.deploymentPullRequestNumber(previousDeployment) }, async () => {
                 await deploy(comment, previousVersion, environment);
@@ -26648,7 +26644,7 @@ const resetPreProductionDeployment = async (context) => {
         return;
     }
     const comment = new comment_1.Comment(context, context.issue().number);
-    const version = await git_1.getShortSha(prodDeployment.sha);
+    const version = prodDeployment.ref;
     const environment = preProductionEnvironment;
     await createDeploymentAndSetStatus(context, version, environment, { pr: context.issue().number }, async () => {
         await deploy(comment, version, environment);
@@ -26699,7 +26695,7 @@ const handleVerifyCommand = async (context, pr, providedEnvironment) => {
     await git_1.checkoutPullRequest(pr);
     await setup(comment);
     try {
-        const version = await git_1.getShortSha(deployment.sha);
+        const version = deployment.ref;
         await verify(comment, version, environment);
         if (environment === config_1.config.preProductionEnvironment) {
             if (utils_1.deploymentPullRequestNumber(deployment) === pr.number) {
@@ -26727,8 +26723,7 @@ const handleDeployCommand = async (context, pr, providedEnvironment, providedVer
         return;
     }
     await git_1.checkoutPullRequest(pr);
-    const deploymentVersion = await git_1.getShortSha(deployment.sha);
-    const version = providedVersion || deploymentVersion;
+    const version = providedVersion || deployment.ref;
     await comment.append(`Running ${comment_1.code(`/deploy ${environment} ${version}`)}...`);
     await setup(comment);
     await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
@@ -37656,6 +37651,30 @@ exports.pullRequestHasBeenDeployed = async (context, prNumber) => {
     return ((await exports.findLastDeploymentForPullRequest(context, prNumber)) !== undefined);
 };
 exports.setDeploymentStatus = (context, deploymentId, state) => context.github.repos.createDeploymentStatus(context.repo({ deployment_id: deploymentId, state }));
+exports.getDeploymentStatus = async (context, deploymentId) => {
+    const statuses = await context.github.repos.listDeploymentStatuses(context.repo({ deployment_id: deploymentId }));
+    if (statuses.data.length === 1) {
+        return statuses.data[0].state;
+    }
+    else if (statuses.data.length > 1) {
+        // We're relying on the fact that deployments are returned in reverse order.
+        // This does not appear to be documented, and there is no way to ask this
+        // endpoint for the "latest" or "active" deployment, or to influence the
+        // ordering. To avoid fetching all deployments and ordering them here, this
+        // performs a simple check to see if the ordering is as we expect it and
+        // error otherwise.
+        //
+        // https://developer.github.com/v3/repos/deployments/#list-deployments
+        const [latestStatus, previousStatus] = statuses.data;
+        if (latestStatus.id < previousStatus.id) {
+            throw new Error("GitHub deployment statuses were not returned in reverse order");
+        }
+        return latestStatus.state;
+    }
+    else {
+        return undefined;
+    }
+};
 exports.createDeployment = (context, ref, environment, payload) => context.github.repos.createDeployment(context.repo({
     task: "deploy",
     payload: JSON.stringify(payload),
