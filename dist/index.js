@@ -26586,7 +26586,7 @@ const handleQACommand = async (context, pr) => {
     else {
         const prNumber = utils_1.deploymentPullRequestNumber(deployment);
         const message = `#${prNumber} is currently deployed ${utils_1.maybeComponentName()}to ${comment_1.code(environment)}. It must be merged or closed before this pull request can be deployed.`;
-        await comment_1.Comment.create(context, pr.number, comment_1.mention(message));
+        await comment_1.Comment.create(context, pr.number, comment_1.warning(comment_1.mention(message)));
         log.error(message);
     }
 };
@@ -26609,7 +26609,7 @@ const invalidateDeployedPullRequest = async (context) => {
             if (baseRef === deployedPr.data.base.ref) {
                 log.debug(`The pull request currently deployed to ${environment} (#${deployedPr}) has the same base (${baseRef}) - invalidating it`);
                 const body = [
-                    `This pull request is no longer up-to-date with ${baseRef} (because #${prNumber} was just merged, which changed ${baseRef}).`,
+                    comment_1.warning(`This pull request is no longer up-to-date with ${baseRef} (because #${prNumber} was just merged, which changed ${baseRef}).`),
                     `Run ${comment_1.code("/qa")} to redeploy your changes to ${comment_1.code(environment)} or ${comment_1.code("/skip-qa")} if you want to ignore the changes in ${baseRef}.`,
                     `Note that using ${comment_1.code("/skip-qa")} will cause the new changes in ${baseRef} to be excluded when this pull request is merged, and they will not be deployed to ${comment_1.code(config_1.config.productionEnvironment)}.`,
                 ].join(" ");
@@ -26693,7 +26693,7 @@ const handleVerifyCommand = async (context, pr, providedEnvironment) => {
     const comment = new comment_1.Comment(context, context.issue().number);
     await comment.append(`Running ${comment_1.code(`/verify ${environment}`)}...`);
     if (!deployment) {
-        await comment.append(`I wasn't able to find a deployment for ${comment_1.code(environment)} to verify.`);
+        await comment.append(comment_1.warning(`I wasn't able to find a deployment for ${comment_1.code(environment)} to verify.`));
         return;
     }
     await git_1.checkoutPullRequest(pr);
@@ -26722,7 +26722,7 @@ const handleDeployCommand = async (context, pr, providedEnvironment, providedVer
     if (!deployment) {
         await comment.append([
             `Running ${comment_1.code(`/deploy`)}...`,
-            `I wasn't able to find the latest release for #${pr.number}`,
+            comment_1.warning(`I wasn't able to find the latest release for #${pr.number}`),
         ]);
         return;
     }

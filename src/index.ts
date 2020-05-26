@@ -334,7 +334,7 @@ const handleQACommand = async (context: Context, pr: PullRequest) => {
     const message = `#${prNumber} is currently deployed ${maybeComponentName()}to ${code(
       environment
     )}. It must be merged or closed before this pull request can be deployed.`;
-    await Comment.create(context, pr.number, mention(message));
+    await Comment.create(context, pr.number, warning(mention(message)));
     log.error(message);
   }
 };
@@ -365,7 +365,9 @@ const invalidateDeployedPullRequest = async (
           `The pull request currently deployed to ${environment} (#${deployedPr}) has the same base (${baseRef}) - invalidating it`
         );
         const body = [
-          `This pull request is no longer up-to-date with ${baseRef} (because #${prNumber} was just merged, which changed ${baseRef}).`,
+          warning(
+            `This pull request is no longer up-to-date with ${baseRef} (because #${prNumber} was just merged, which changed ${baseRef}).`
+          ),
           `Run ${code("/qa")} to redeploy your changes to ${code(
             environment
           )} or ${code(
@@ -514,7 +516,9 @@ const handleVerifyCommand = async (
 
   if (!deployment) {
     await comment.append(
-      `I wasn't able to find a deployment for ${code(environment)} to verify.`
+      warning(
+        `I wasn't able to find a deployment for ${code(environment)} to verify.`
+      )
     );
     return;
   }
@@ -567,7 +571,7 @@ const handleDeployCommand = async (
   if (!deployment) {
     await comment.append([
       `Running ${code(`/deploy`)}...`,
-      `I wasn't able to find the latest release for #${pr.number}`,
+      warning(`I wasn't able to find the latest release for #${pr.number}`),
     ]);
     return;
   }
