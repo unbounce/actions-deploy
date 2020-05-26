@@ -26548,7 +26548,7 @@ const handlePrMerged = async (context, pr) => {
 const handleQACommand = async (context, pr) => {
     const environment = config_1.config.preProductionEnvironment;
     const deployment = await utils_1.findDeployment(context, environment);
-    if (utils_1.environmentIsAvailable(context, deployment)) {
+    if (await utils_1.environmentIsAvailable(context, deployment)) {
         await git_1.checkoutPullRequest(pr);
         const comment = new comment_1.Comment(context, context.issue().number);
         await comment.append(`Running ${comment_1.code("/qa")}...`);
@@ -26557,7 +26557,7 @@ const handleQACommand = async (context, pr) => {
             await git_1.updatePullRequest(pr);
         }
         catch (e) {
-            await utils_1.handleError(comment, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`, e);
+            await utils_1.handleError(comment, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running ${comment_1.code("/qa")} again.`, e);
             return;
         }
         const version = await git_1.getShortSha("HEAD");

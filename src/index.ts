@@ -284,7 +284,7 @@ const handleQACommand = async (context: Context, pr: PullRequest) => {
   const environment = config.preProductionEnvironment;
   const deployment = await findDeployment(context, environment);
 
-  if (environmentIsAvailable(context, deployment)) {
+  if (await environmentIsAvailable(context, deployment)) {
     await checkoutPullRequest(pr);
     const comment = new Comment(context, context.issue().number);
     await comment.append(`Running ${code("/qa")}...`);
@@ -294,7 +294,9 @@ const handleQACommand = async (context: Context, pr: PullRequest) => {
     } catch (e) {
       await handleError(
         comment,
-        `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running /qa again.`,
+        `I failed to bring ${pr.head.ref} up-to-date with ${
+          pr.base.ref
+        }. Please resolve conflicts before running ${code("/qa")} again.`,
         e
       );
       return;
