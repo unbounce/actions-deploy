@@ -35,10 +35,9 @@ jobs:
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     # Should be inverse of `if` below
     if: "(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify'))))"
-    defaults:
-      if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${env.ACTIONS_DEPLOY_NAME}'))"
     steps:
     - uses: unbounce/actions-deploy@master
+      if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
       with:
         release: make release # or: npm run release
         deploy: make deploy # or: npm run deploy --environment "$ENVIRONMENT" --version "$VERSION"
@@ -54,11 +53,11 @@ jobs:
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     # Should be inverse of `if` above
     if: "(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify'))))"
-    defaults:
-      if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${env.ACTIONS_DEPLOY_NAME}'))"
     steps:
     - uses: actions/checkout@master
+      if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
     - uses: unbounce/actions-deploy@master
+      if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
       with:
         setup: make deps # or: npm ci
         release: make release # or: npm run release
