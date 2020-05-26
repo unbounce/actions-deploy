@@ -8,6 +8,8 @@ const input = (name: string) => {
 };
 
 export const config = {
+  isComponent: "ACTIONS_DEPLOY_NAME" in process.env,
+  componentName: process.env[`ACTIONS_DEPLOY_NAME`],
   statusCheckContext: "QA",
   productionEnvironment: input("production-environment"),
   preProductionEnvironment: input("pre-production-environment"),
