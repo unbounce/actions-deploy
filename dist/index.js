@@ -26425,7 +26425,7 @@ const setup = async (comment) => {
 const release = async (comment, version) => {
     try {
         comment.separator();
-        await comment.append(`Releasing ${version}...`);
+        await comment.append(`Releasing ${utils_1.maybeComponentName()}${version}...`);
         const env = {
             VERSION: version,
         };
@@ -26437,18 +26437,18 @@ const release = async (comment, version) => {
         const output = await shell_1.shell(commands, env);
         await comment.append([
             comment_1.logToDetails(output),
-            comment_1.success(`${version} was successfully released.`),
+            comment_1.success(`${utils_1.maybeComponentName()}${version} was successfully released.`),
         ]);
     }
     catch (e) {
-        await utils_1.handleError(comment, `releaseing ${version} failed`, e);
+        await utils_1.handleError(comment, `releaseing ${utils_1.maybeComponentName()}${version} failed`, e);
         throw e;
     }
 };
 const deploy = async (comment, version, environment) => {
     try {
         comment.separator();
-        await comment.append(`Deploying ${version} to ${comment_1.code(environment)}...`);
+        await comment.append(`Deploying ${utils_1.maybeComponentName()}${version} to ${comment_1.code(environment)}...`);
         const env = {
             VERSION: version,
             ENVIRONMENT: environment,
@@ -26461,18 +26461,18 @@ const deploy = async (comment, version, environment) => {
         const output = await shell_1.shell(commands, env);
         await comment.append([
             comment_1.logToDetails(output),
-            comment_1.success(`${version} was successfully deployed to ${comment_1.code(environment)}.`),
+            comment_1.success(`${utils_1.maybeComponentName()}${version} was successfully deployed to ${comment_1.code(environment)}.`),
         ]);
     }
     catch (e) {
-        await utils_1.handleError(comment, `deploying ${version} to ${comment_1.code(environment)} failed`, e);
+        await utils_1.handleError(comment, `deploying ${utils_1.maybeComponentName()}${version} to ${comment_1.code(environment)} failed`, e);
         throw e;
     }
 };
 const verify = async (comment, version, environment) => {
     try {
         comment.separator();
-        await comment.append(`Verifying ${version} in ${comment_1.code(environment)}...`);
+        await comment.append(`Verifying ${utils_1.maybeComponentName()}${version} in ${comment_1.code(environment)}...`);
         const env = {
             VERSION: version,
             ENVIRONMENT: environment,
@@ -26485,11 +26485,11 @@ const verify = async (comment, version, environment) => {
         const output = await shell_1.shell(commands, env);
         await comment.append([
             comment_1.logToDetails(output),
-            comment_1.success(`${version} was successfully verified in ${comment_1.code(environment)}.`),
+            comment_1.success(`${utils_1.maybeComponentName()}${version} was successfully verified in ${comment_1.code(environment)}.`),
         ]);
     }
     catch (e) {
-        await utils_1.handleError(comment, `verifying ${version} in ${comment_1.code(environment)} failed`, e);
+        await utils_1.handleError(comment, `verifying ${utils_1.maybeComponentName()}${version} in ${comment_1.code(environment)} failed`, e);
         throw e;
     }
 };
@@ -26529,12 +26529,12 @@ const handlePrMerged = async (context, pr) => {
             // Rollback
             const previousDeployment = await utils_1.findPreviousDeployment(context, environment);
             if (!previousDeployment) {
-                await comment.append(comment_1.warning(`Unable to find previous deployment for ${comment_1.code(environment)} to roll back to.`));
+                await comment.append(comment_1.warning(`Unable to find previous deployment for ${utils_1.maybeComponentName()}${comment_1.code(environment)} to roll back to.`));
                 // Re-throw so that first deployment is marked as "error"
                 throw e;
             }
             const previousVersion = await git_1.getShortSha(previousDeployment.sha);
-            await comment.append(comment_1.warning(`Rolling back ${comment_1.code(environment)} to ${previousVersion}...`));
+            await comment.append(comment_1.warning(`Rolling back ${utils_1.maybeComponentName()}${comment_1.code(environment)} to ${previousVersion}...`));
             await createDeploymentAndSetStatus(context, previousVersion, environment, { pr: utils_1.deploymentPullRequestNumber(previousDeployment) }, async () => {
                 await deploy(comment, previousVersion, environment);
                 await verify(comment, previousVersion, environment);
@@ -26580,7 +26580,7 @@ const handleQACommand = async (context, pr) => {
     }
     else {
         const prNumber = utils_1.deploymentPullRequestNumber(deployment);
-        const message = `#${prNumber} is currently deployed to ${comment_1.code(environment)}. It must be merged or closed before this pull request can be deployed.`;
+        const message = `#${prNumber} is currently deployed ${utils_1.maybeComponentName()}to ${comment_1.code(environment)}. It must be merged or closed before this pull request can be deployed.`;
         await utils_1.createComment(context, pr.number, [comment_1.mention(message)]);
         log.error(message);
     }
@@ -26649,7 +26649,7 @@ const resetPreProductionDeployment = async (context) => {
         await deploy(comment, version, environment);
         await verify(comment, version, environment);
     });
-    await comment.append(comment_1.success(`Reset ${comment_1.code(preProductionEnvironment)} to version ${version} from ${comment_1.code(productionEnvironment)}.`));
+    await comment.append(comment_1.success(`Reset ${comment_1.code(preProductionEnvironment)} ${utils_1.maybeComponentName()}to version ${version} from ${comment_1.code(productionEnvironment)}.`));
 };
 const updateOutdatedDeployment = async (context, pr) => {
     const { preProductionEnvironment } = config_1.config;
@@ -37563,6 +37563,7 @@ exports.environmentWithComponent = (environment) => {
     }
 };
 exports.componentLabel = () => `actions-deploy/${config_1.config.componentName}`;
+exports.maybeComponentName = () => config_1.config.componentName ? `${comment.code(config_1.config.componentName)} ` : "";
 // From https://github.com/probot/commands/blob/master/index.js
 exports.commandMatches = (context, match) => {
     // tslint:disable-next-line:no-shadowed-variable

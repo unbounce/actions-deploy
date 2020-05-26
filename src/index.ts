@@ -18,6 +18,7 @@ import {
   handleError,
   pullRequestHasBeenDeployed,
   findLastDeploymentForPullRequest,
+  maybeComponentName,
 } from "./utils";
 import * as log from "./logging";
 import { shell } from "./shell";
@@ -70,7 +71,7 @@ const setup = async (comment: Comment) => {
 const release = async (comment: Comment, version: string) => {
   try {
     comment.separator();
-    await comment.append(`Releasing ${version}...`);
+    await comment.append(`Releasing ${maybeComponentName()}${version}...`);
     const env = {
       VERSION: version,
     };
@@ -82,10 +83,14 @@ const release = async (comment: Comment, version: string) => {
     const output = await shell(commands, env);
     await comment.append([
       logToDetails(output),
-      success(`${version} was successfully released.`),
+      success(`${maybeComponentName()}${version} was successfully released.`),
     ]);
   } catch (e) {
-    await handleError(comment, `releaseing ${version} failed`, e);
+    await handleError(
+      comment,
+      `releaseing ${maybeComponentName()}${version} failed`,
+      e
+    );
     throw e;
   }
 };
@@ -97,7 +102,9 @@ const deploy = async (
 ) => {
   try {
     comment.separator();
-    await comment.append(`Deploying ${version} to ${code(environment)}...`);
+    await comment.append(
+      `Deploying ${maybeComponentName()}${version} to ${code(environment)}...`
+    );
     const env = {
       VERSION: version,
       ENVIRONMENT: environment,
@@ -110,12 +117,18 @@ const deploy = async (
     const output = await shell(commands, env);
     await comment.append([
       logToDetails(output),
-      success(`${version} was successfully deployed to ${code(environment)}.`),
+      success(
+        `${maybeComponentName()}${version} was successfully deployed to ${code(
+          environment
+        )}.`
+      ),
     ]);
   } catch (e) {
     await handleError(
       comment,
-      `deploying ${version} to ${code(environment)} failed`,
+      `deploying ${maybeComponentName()}${version} to ${code(
+        environment
+      )} failed`,
       e
     );
     throw e;
@@ -129,7 +142,9 @@ const verify = async (
 ) => {
   try {
     comment.separator();
-    await comment.append(`Verifying ${version} in ${code(environment)}...`);
+    await comment.append(
+      `Verifying ${maybeComponentName()}${version} in ${code(environment)}...`
+    );
     const env = {
       VERSION: version,
       ENVIRONMENT: environment,
@@ -142,12 +157,18 @@ const verify = async (
     const output = await shell(commands, env);
     await comment.append([
       logToDetails(output),
-      success(`${version} was successfully verified in ${code(environment)}.`),
+      success(
+        `${maybeComponentName()}${version} was successfully verified in ${code(
+          environment
+        )}.`
+      ),
     ]);
   } catch (e) {
     await handleError(
       comment,
-      `verifying ${version} in ${code(environment)} failed`,
+      `verifying ${maybeComponentName()}${version} in ${code(
+        environment
+      )} failed`,
       e
     );
     throw e;
@@ -224,7 +245,7 @@ const handlePrMerged = async (
         if (!previousDeployment) {
           await comment.append(
             warning(
-              `Unable to find previous deployment for ${code(
+              `Unable to find previous deployment for ${maybeComponentName()}${code(
                 environment
               )} to roll back to.`
             )
@@ -235,7 +256,11 @@ const handlePrMerged = async (
 
         const previousVersion = await getShortSha(previousDeployment.sha);
         await comment.append(
-          warning(`Rolling back ${code(environment)} to ${previousVersion}...`)
+          warning(
+            `Rolling back ${maybeComponentName()}${code(
+              environment
+            )} to ${previousVersion}...`
+          )
         );
         await createDeploymentAndSetStatus(
           context,
@@ -305,7 +330,7 @@ const handleQACommand = async (context: Context, pr: PullRequest) => {
     );
   } else {
     const prNumber = deploymentPullRequestNumber(deployment);
-    const message = `#${prNumber} is currently deployed to ${code(
+    const message = `#${prNumber} is currently deployed ${maybeComponentName()}to ${code(
       environment
     )}. It must be merged or closed before this pull request can be deployed.`;
     await createComment(context, pr.number, [mention(message)]);
@@ -418,7 +443,9 @@ const resetPreProductionDeployment = async (
     success(
       `Reset ${code(
         preProductionEnvironment
-      )} to version ${version} from ${code(productionEnvironment)}.`
+      )} ${maybeComponentName()}to version ${version} from ${code(
+        productionEnvironment
+      )}.`
     )
   );
 };
