@@ -37604,20 +37604,15 @@ exports.commandParameters = (context) => {
 exports.reactToComment = async (context, content = "eyes") => {
     switch (context.event) {
         case "issue_comment":
-            const id = context.payload.issue
-                .id;
+            const id = context.payload
+                .comment.id;
             await context.github.reactions.createForIssueComment(context.repo({
                 comment_id: id,
                 content,
             }));
             break;
         case "pull_request":
-            const number = context.payload
-                .pull_request.number;
-            await context.github.reactions.createForIssue(context.repo({
-                issue_number: number,
-                content,
-            }));
+            await context.github.reactions.createForIssue(context.issue({ content }));
             break;
         default:
             throw new Error(`Unknown event type ${context.event}`);
