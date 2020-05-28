@@ -6,32 +6,35 @@ import { config } from "./config";
 import {
   commandMatches,
   commandParameters,
+  commentBody,
   componentLabel,
-  setCommitStatus,
-  setDeploymentStatus,
   createDeployment,
+  deploymentPullRequestNumber,
+  environmentIsAvailable,
   findDeployment,
+  findLastDeploymentForPullRequest,
   findPreviousDeployment,
   getDeploymentStatus,
-  environmentIsAvailable,
-  deploymentPullRequestNumber,
   handleError,
-  pullRequestHasBeenDeployed,
-  findLastDeploymentForPullRequest,
+  looksLikeACommand,
   maybeComponentName,
+  pullRequestHasBeenDeployed,
+  reactToComment,
+  setCommitStatus,
+  setDeploymentStatus,
 } from "./utils";
 import * as log from "./logging";
 import { shell } from "./shell";
 import { getShortSha, checkoutPullRequest, updatePullRequest } from "./git";
 import {
   Comment,
-  mention,
   code,
-  logToDetails,
   error,
-  warning,
-  success,
   info,
+  logToDetails,
+  mention,
+  success,
+  warning,
 } from "./comment";
 
 import { PullRequest } from "./types";
@@ -601,7 +604,7 @@ const handleDeployCommand = async (
   );
 };
 
-const commentPullRequestNotDeployed = (context: Context) => {
+const commentPullRequestNotDeployed = async (context: Context) => {
   return Comment.create(
     context,
     context.issue().number,
@@ -665,12 +668,16 @@ const probot = (app: Application) => {
 
     switch (true) {
       case commandMatches(context, "skip-qa"): {
-        await setCommitStatus(context, pr.data, "success");
+        await Promise.all([
+          reactToComment(context, "eyes"),
+          setCommitStatus(context, pr.data, "success"),
+        ]);
         break;
       }
 
       case commandMatches(context, "qa"): {
         await Promise.all([
+          reactToComment(context, "eyes"),
           setCommitStatus(context, pr.data, "pending"),
           handleQACommand(context, pr.data),
         ]);
@@ -678,7 +685,8 @@ const probot = (app: Application) => {
       }
 
       case commandMatches(context, "failed-qa"): {
-        if (pullRequestHasBeenDeployed(context, pr.data.number)) {
+        await reactToComment(context, "eyes");
+        if (await pullRequestHasBeenDeployed(context, pr.data.number)) {
           await setCommitStatus(context, pr.data, "failure");
         } else {
           await commentPullRequestNotDeployed(context);
@@ -687,7 +695,8 @@ const probot = (app: Application) => {
       }
 
       case commandMatches(context, "passed-qa"): {
-        if (pullRequestHasBeenDeployed(context, pr.data.number)) {
+        await reactToComment(context, "eyes");
+        if (await pullRequestHasBeenDeployed(context, pr.data.number)) {
           await setCommitStatus(context, pr.data, "success");
         } else {
           await commentPullRequestNotDeployed(context);
@@ -697,7 +706,10 @@ const probot = (app: Application) => {
 
       case commandMatches(context, "verify"): {
         const [providedEnvironment] = commandParameters(context);
-        await handleVerifyCommand(context, pr.data, providedEnvironment);
+        await Promise.all([
+          reactToComment(context, "eyes"),
+          handleVerifyCommand(context, pr.data, providedEnvironment),
+        ]);
         break;
       }
 
@@ -705,17 +717,23 @@ const probot = (app: Application) => {
         const [providedEnvironment, providedVersion] = commandParameters(
           context
         );
-        await handleDeployCommand(
-          context,
-          pr.data,
-          providedEnvironment,
-          providedVersion
-        );
+        await Promise.all([
+          reactToComment(context, "eyes"),
+          handleDeployCommand(
+            context,
+            pr.data,
+            providedEnvironment,
+            providedVersion
+          ),
+        ]);
         break;
       }
 
       default: {
-        log.debug("Unknown command", context);
+        if (looksLikeACommand(context)) {
+          await reactToComment(context, "confused");
+        }
+        log.debug(`Unknown command: ${commentBody(context)}`);
       }
     }
   });

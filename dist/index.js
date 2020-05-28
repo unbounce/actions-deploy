@@ -26734,7 +26734,7 @@ const handleDeployCommand = async (context, pr, providedEnvironment, providedVer
         await comment.append(comment_1.success("Done"));
     });
 };
-const commentPullRequestNotDeployed = (context) => {
+const commentPullRequestNotDeployed = async (context) => {
     return comment_1.Comment.create(context, context.issue().number, `This pull request has not been deployed yet. You can use ${comment_1.code("/qa")} to deploy it to ${comment_1.code(config_1.config.preProductionEnvironment)} or ${comment_1.code("/skip-qa")} to not deploy this pull request.`);
 };
 const probot = (app) => {
@@ -26770,18 +26770,23 @@ const probot = (app) => {
         }
         switch (true) {
             case utils_1.commandMatches(context, "skip-qa"): {
-                await utils_1.setCommitStatus(context, pr.data, "success");
+                await Promise.all([
+                    utils_1.reactToComment(context, "eyes"),
+                    utils_1.setCommitStatus(context, pr.data, "success"),
+                ]);
                 break;
             }
             case utils_1.commandMatches(context, "qa"): {
                 await Promise.all([
+                    utils_1.reactToComment(context, "eyes"),
                     utils_1.setCommitStatus(context, pr.data, "pending"),
                     handleQACommand(context, pr.data),
                 ]);
                 break;
             }
             case utils_1.commandMatches(context, "failed-qa"): {
-                if (utils_1.pullRequestHasBeenDeployed(context, pr.data.number)) {
+                await utils_1.reactToComment(context, "eyes");
+                if (await utils_1.pullRequestHasBeenDeployed(context, pr.data.number)) {
                     await utils_1.setCommitStatus(context, pr.data, "failure");
                 }
                 else {
@@ -26790,7 +26795,8 @@ const probot = (app) => {
                 break;
             }
             case utils_1.commandMatches(context, "passed-qa"): {
-                if (utils_1.pullRequestHasBeenDeployed(context, pr.data.number)) {
+                await utils_1.reactToComment(context, "eyes");
+                if (await utils_1.pullRequestHasBeenDeployed(context, pr.data.number)) {
                     await utils_1.setCommitStatus(context, pr.data, "success");
                 }
                 else {
@@ -26800,16 +26806,25 @@ const probot = (app) => {
             }
             case utils_1.commandMatches(context, "verify"): {
                 const [providedEnvironment] = utils_1.commandParameters(context);
-                await handleVerifyCommand(context, pr.data, providedEnvironment);
+                await Promise.all([
+                    utils_1.reactToComment(context, "eyes"),
+                    handleVerifyCommand(context, pr.data, providedEnvironment),
+                ]);
                 break;
             }
             case utils_1.commandMatches(context, "deploy"): {
                 const [providedEnvironment, providedVersion] = utils_1.commandParameters(context);
-                await handleDeployCommand(context, pr.data, providedEnvironment, providedVersion);
+                await Promise.all([
+                    utils_1.reactToComment(context, "eyes"),
+                    handleDeployCommand(context, pr.data, providedEnvironment, providedVersion),
+                ]);
                 break;
             }
             default: {
-                log.debug("Unknown command", context);
+                if (utils_1.looksLikeACommand(context)) {
+                    await utils_1.reactToComment(context, "confused");
+                }
+                log.debug(`Unknown command: ${utils_1.commentBody(context)}`);
             }
         }
     });
@@ -37559,12 +37574,19 @@ exports.environmentWithComponent = (environment) => {
 };
 exports.componentLabel = () => `actions-deploy/${config_1.config.componentName}`;
 exports.maybeComponentName = () => config_1.config.componentName ? `${comment.code(config_1.config.componentName)} ` : "";
-// From https://github.com/probot/commands/blob/master/index.js
-exports.commandMatches = (context, match) => {
+exports.commentBody = (context) => {
     // tslint:disable-next-line:no-shadowed-variable
     const { comment, issue, pull_request: pr } = context.payload;
-    const command = (comment || issue || pr).body.match(/^\/([\w-]+)\s*?(.*)?$/m);
+    return (comment || issue || pr).body;
+};
+// From https://github.com/probot/commands/blob/master/index.js
+exports.commandMatches = (context, match) => {
+    const command = exports.commentBody(context).match(/^\/([\w-]+)\s*?(.*)?$/m);
     return Boolean(command && command[1] === match);
+};
+exports.looksLikeACommand = (context) => {
+    const command = exports.commentBody(context).match(/^\/([\w-]+)\s*?(.*)?$/m);
+    return Boolean(command);
 };
 // Return parameters included with a command, for example a command like
 // `/deploy production abc123` will return ["production", "abc123"]
@@ -37577,6 +37599,28 @@ exports.commandParameters = (context) => {
     }
     else {
         return [];
+    }
+};
+exports.reactToComment = async (context, content = "eyes") => {
+    switch (context.event) {
+        case "issue_comment":
+            const id = context.payload.issue
+                .id;
+            await context.github.reactions.createForIssueComment(context.repo({
+                comment_id: id,
+                content,
+            }));
+            break;
+        case "pull_request":
+            const number = context.payload
+                .pull_request.number;
+            await context.github.reactions.createForIssue(context.repo({
+                issue_number: number,
+                content,
+            }));
+            break;
+        default:
+            throw new Error(`Unknown event type ${context.event}`);
     }
 };
 exports.setCommitStatus = async (context, pr, state) => {

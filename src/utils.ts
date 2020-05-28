@@ -1,4 +1,5 @@
 import type { Context } from "probot";
+import type Webhooks from "@octokit/webhooks";
 
 import { config } from "./config";
 import * as comment from "./comment";
@@ -9,6 +10,7 @@ import {
   PullRequest,
   DeploymentStatusState,
   CommitStatusState,
+  ReactionContent,
 } from "./types";
 
 export const environmentWithComponent = (environment: string) => {
@@ -24,14 +26,21 @@ export const componentLabel = () => `actions-deploy/${config.componentName}`;
 export const maybeComponentName = () =>
   config.componentName ? `${comment.code(config.componentName)} ` : "";
 
-// From https://github.com/probot/commands/blob/master/index.js
-export const commandMatches = (context: Context, match: string): boolean => {
+export const commentBody = (context: Context) => {
   // tslint:disable-next-line:no-shadowed-variable
   const { comment, issue, pull_request: pr } = context.payload;
-  const command = ((comment || issue || pr).body as string).match(
-    /^\/([\w-]+)\s*?(.*)?$/m
-  );
+  return (comment || issue || pr).body as string;
+};
+
+// From https://github.com/probot/commands/blob/master/index.js
+export const commandMatches = (context: Context, match: string): boolean => {
+  const command = commentBody(context).match(/^\/([\w-]+)\s*?(.*)?$/m);
   return Boolean(command && command[1] === match);
+};
+
+export const looksLikeACommand = (context: Context): boolean => {
+  const command = commentBody(context).match(/^\/([\w-]+)\s*?(.*)?$/m);
+  return Boolean(command);
 };
 
 // Return parameters included with a command, for example a command like
@@ -46,6 +55,36 @@ export const commandParameters = (context: Context): string[] => {
     return parameters[1].split(" ");
   } else {
     return [];
+  }
+};
+
+export const reactToComment = async (
+  context: Context,
+  content: ReactionContent = "eyes"
+) => {
+  switch (context.event) {
+    case "issue_comment":
+      const id = (context.payload as Webhooks.WebhookPayloadIssueComment).issue
+        .id;
+      await context.github.reactions.createForIssueComment(
+        context.repo({
+          comment_id: id,
+          content,
+        })
+      );
+      break;
+    case "pull_request":
+      const number = (context.payload as Webhooks.WebhookPayloadPullRequest)
+        .pull_request.number;
+      await context.github.reactions.createForIssue(
+        context.repo({
+          issue_number: number,
+          content,
+        })
+      );
+      break;
+    default:
+      throw new Error(`Unknown event type ${context.event}`);
   }
 };
 
