@@ -217,6 +217,7 @@ const handlePrMerged = async (
         )
       )
     );
+    return;
   }
 
   await comment.append(

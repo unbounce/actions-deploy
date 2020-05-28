@@ -26516,6 +26516,7 @@ const handlePrMerged = async (context, pr) => {
     const deploymentStatus = await utils_1.getDeploymentStatus(context, deployment.id);
     if (deploymentStatus !== "success") {
         await comment.append(comment_1.error(comment_1.mention(`The ${utils_1.maybeComponentName()}${comment_1.code(preProductionEnvironment)} deployment resulted in ${comment_1.code(deploymentStatus || "unknown")} - not deploying to ${comment_1.code(productionEnvironment)}.`)));
+        return;
     }
     await comment.append(comment_1.mention(`Deploying to ${comment_1.code(productionEnvironment)}...`));
     await setup(comment);
