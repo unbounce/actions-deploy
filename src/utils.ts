@@ -156,6 +156,36 @@ export const setDeploymentStatus = (
     context.repo({ deployment_id: deploymentId, state })
   );
 
+export const getDeploymentStatus = async (
+  context: Context,
+  deploymentId: number
+) => {
+  const statuses = await context.github.repos.listDeploymentStatuses(
+    context.repo({ deployment_id: deploymentId })
+  );
+  if (statuses.data.length === 1) {
+    return statuses.data[0].state;
+  } else if (statuses.data.length > 1) {
+    // We're relying on the fact that deployments are returned in reverse order.
+    // This does not appear to be documented, and there is no way to ask this
+    // endpoint for the "latest" or "active" deployment, or to influence the
+    // ordering. To avoid fetching all deployments and ordering them here, this
+    // performs a simple check to see if the ordering is as we expect it and
+    // error otherwise.
+    //
+    // https://developer.github.com/v3/repos/deployments/#list-deployments
+    const [latestStatus, previousStatus] = statuses.data;
+    if (latestStatus.id < previousStatus.id) {
+      throw new Error(
+        "GitHub deployment statuses were not returned in reverse order"
+      );
+    }
+    return latestStatus.state;
+  } else {
+    return undefined;
+  }
+};
+
 export const createDeployment = (
   context: Context,
   ref: string,

@@ -12,6 +12,7 @@ import {
   createDeployment,
   findDeployment,
   findPreviousDeployment,
+  getDeploymentStatus,
   environmentIsAvailable,
   deploymentPullRequestNumber,
   handleError,
@@ -27,6 +28,7 @@ import {
   mention,
   code,
   logToDetails,
+  error,
   warning,
   success,
   info,
@@ -196,35 +198,34 @@ const handlePrMerged = async (
     return;
   }
 
-  if (deployment.sha !== pr.head.sha) {
-    const message = [
-      warning(
-        `️The deployment to ${code(
-          preProductionEnvironment
-        )} was outdated, so I skipped deployment to ${code(
-          productionEnvironment
-        )}.`
-      ),
-      mention(
-        `, please check ${code(pr.base.ref)} and deploy manually if necessary.`
-      ),
-    ];
-
-    await Comment.create(context, pr.number, message);
-    return;
-  }
-
   log.debug(
     `${pr.number} was merged, and is currently deployed to ${preProductionEnvironment} - deploying it to ${productionEnvironment}`
   );
 
   const comment = new Comment(context, context.issue().number);
+
+  const deploymentStatus = await getDeploymentStatus(context, deployment.id);
+  if (deploymentStatus !== "success") {
+    await comment.append(
+      error(
+        mention(
+          `The ${maybeComponentName()}${code(
+            preProductionEnvironment
+          )} deployment resulted in ${code(
+            deploymentStatus || "unknown"
+          )} - not deploying to ${code(productionEnvironment)}.`
+        )
+      )
+    );
+    return;
+  }
+
   await comment.append(
     mention(`Deploying to ${code(productionEnvironment)}...`)
   );
 
   await setup(comment);
-  const version = await getShortSha(deployment.sha);
+  const version = deployment.ref;
   const environment = productionEnvironment;
   await createDeploymentAndSetStatus(
     context,
@@ -253,7 +254,7 @@ const handlePrMerged = async (
           throw e;
         }
 
-        const previousVersion = await getShortSha(previousDeployment.sha);
+        const previousVersion = previousDeployment.ref;
         await comment.append(
           warning(
             `Rolling back ${maybeComponentName()}${code(
@@ -428,7 +429,7 @@ const resetPreProductionDeployment = async (
   }
 
   const comment = new Comment(context, context.issue().number);
-  const version = await getShortSha(prodDeployment.sha);
+  const version = prodDeployment.ref;
   const environment = preProductionEnvironment;
 
   await createDeploymentAndSetStatus(
@@ -528,7 +529,7 @@ const handleVerifyCommand = async (
   await setup(comment);
 
   try {
-    const version = await getShortSha(deployment.sha);
+    const version = deployment.ref;
     await verify(comment, version, environment);
 
     if (environment === config.preProductionEnvironment) {
@@ -578,8 +579,7 @@ const handleDeployCommand = async (
 
   await checkoutPullRequest(pr);
 
-  const deploymentVersion = await getShortSha(deployment.sha);
-  const version = providedVersion || deploymentVersion;
+  const version = providedVersion || deployment.ref;
 
   await comment.append(
     `Running ${code(`/deploy ${environment} ${version}`)}...`
