@@ -64,8 +64,8 @@ export const reactToComment = async (
 ) => {
   switch (context.event) {
     case "issue_comment":
-      const id = (context.payload as Webhooks.WebhookPayloadIssueComment).issue
-        .id;
+      const id = (context.payload as Webhooks.WebhookPayloadIssueComment)
+        .comment.id;
       await context.github.reactions.createForIssueComment(
         context.repo({
           comment_id: id,
@@ -73,16 +73,11 @@ export const reactToComment = async (
         })
       );
       break;
+
     case "pull_request":
-      const number = (context.payload as Webhooks.WebhookPayloadPullRequest)
-        .pull_request.number;
-      await context.github.reactions.createForIssue(
-        context.repo({
-          issue_number: number,
-          content,
-        })
-      );
+      await context.github.reactions.createForIssue(context.issue({ content }));
       break;
+
     default:
       throw new Error(`Unknown event type ${context.event}`);
   }
