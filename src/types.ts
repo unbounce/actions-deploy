@@ -18,3 +18,6 @@ export type CommitStatusState = NonNullable<
 export type DeploymentStatusState = NonNullable<
   UnwrapList<Parameters<GitHubAPI["repos"]["createDeploymentStatus"]>>
 >["state"];
+export type ReactionContent = NonNullable<
+  UnwrapList<Parameters<GitHubAPI["reactions"]["createForIssue"]>>
+>["content"];

@@ -123,6 +123,5 @@ This action can be configured via the `with` section with the following configur
 |`deploy`|Yes||Command to run to perform deploy. Environment variables `ENVIRONMENT` and `VERSION` will be available.|
 |`setup`|No||Command to run before release, deploy, or verify|
 |`verify`|No||Command to run to verify a deployment. Environment variables `ENVIRONMENT` and `VERSION` will be available.|
-|`master-branch`|No|`master`||
 |`production-environment`|No|`production`||
 |`pre-production-environment`|No|`integration`||
