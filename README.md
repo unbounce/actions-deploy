@@ -2,6 +2,13 @@
 
 GitHub Actions-based Release and Deployment.
 
+- release and deployment is driven from the pull request
+- a pull request is the deployable unit
+  - each release is tied to a pull request
+  - a roll back involves re-deploying a previous pull request
+- the same release artifact that is deployed to the pre-production environment for verification is deployed to the production environment
+
+
 ## Usage
 
 Create a workflow in your repository (such as `.github/workflows/deployment.yaml`):
