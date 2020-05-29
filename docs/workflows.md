@@ -15,6 +15,11 @@
 - `/qa` can be run multiple times on a pull request, if needed
 - If a pull request is currently deployed to the pre-production environment, pushing new changes to it will re-run the `release`, `deploy`, and `verify` commands
 
+## Skipping the Workflow for a Pull Request
+
+1. Comment `/skip-qa`
+    - The QA status check to "passed" and no release or deploys will be done for this pull request
+
 ## Rollback Pre-Production Deploy
 
 1. Close the pull request
@@ -35,3 +40,13 @@
 1. Find the release version (the short commit sha)
 1. Comment `/deploy <environment> <version>` (eg. `/deploy staging abc1234`)
      - This will run the `deploy` and `verify` commands for the provided environment and release version
+     - Omitting the environment will default to the pre-production environment
+     - Omitting the version will default to the latest release version for the pull request
+
+## Rerun Verify Command
+
+If running the `verify` command fails while running `/qa`, or if you need to run it again for some other reason you can:
+
+1. Find the pull request that contains the version of the `verify` command that you would like to run.
+1. Comment `/verify` `/verify <environment>` (eg. `/verify production`)
+     - This will run the `verify` command for the environment specified (or default to the pre-production environment)
