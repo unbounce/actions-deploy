@@ -78,6 +78,8 @@ environment. Then `/passed-qa` or `/failed-qa` should be commented once manual
 verification of the release is complete. Merging the pull request after
 commenting `/qa` will deploy the release to the production environment.
 
+ℹ️See also [docs/workflows.md](./docs/workflows.md).
+
 ### Multiple Components
 
 Monorepos or repositories that have more than one component must specify a
