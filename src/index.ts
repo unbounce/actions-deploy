@@ -363,8 +363,12 @@ const invalidateDeployedPullRequest = async (
       const deployedPr = await context.github.pulls.get(
         context.repo({ pull_number: deployedPrNumber })
       );
-      // If bases are the same, invalidate it
-      if (baseRef === deployedPr.data.base.ref) {
+      // If bases are the same and it is open, invalidate it
+      if (deployedPr.data.state !== "open") {
+        log.debug(
+          `The pull request currently deployed to ${environment} (#${deployedPr}) is closed - nothing to do`
+        );
+      } else if (baseRef === deployedPr.data.base.ref) {
         log.debug(
           `The pull request currently deployed to ${environment} (#${deployedPr}) has the same base (${baseRef}) - invalidating it`
         );
