@@ -26537,6 +26537,19 @@ const handlePrMerged = async (context, pr) => {
             }
             const previousVersion = previousDeployment.ref;
             await comment.append(comment_1.warning(`Rolling back ${utils_1.maybeComponentName()}${comment_1.code(environment)} to ${previousVersion}...`));
+            // Switch to the commit the previous release before deploying.
+            //
+            // NOTE That this isn't guaranteed to be the commit that was used to
+            // deploy this version to production (as /deploy <environment> <version>
+            // could have been used on a commit that was not `previousVersion`), but
+            // this is likely to be correct in most cases, and is definitely more
+            // correct that using the current commit to deploy `previousVersion`.
+            try {
+                await git_1.checkout(previousVersion);
+            }
+            catch (e) {
+                await utils_1.handleError(comment, "failed to checkout to previous deployed version", e);
+            }
             await createDeploymentAndSetStatus(context, previousVersion, environment, { pr: utils_1.deploymentPullRequestNumber(previousDeployment) }, async () => {
                 await deploy(comment, previousVersion, environment);
                 await verify(comment, previousVersion, environment);
@@ -97041,6 +97054,7 @@ exports.checkoutPullRequest = (pr) => {
         `git checkout ${ref}`,
     ]);
 };
+exports.checkout = (ref) => shell_1.shell([`git checkout ${ref}`]);
 exports.updatePullRequest = async (pr) => {
     const currentBranch = pr.head.ref;
     const baseBranch = pr.base.ref;
