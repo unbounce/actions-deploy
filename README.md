@@ -2,12 +2,13 @@
 
 GitHub Actions-based Release and Deployment.
 
-- release and deployment is driven from the pull request
-- a pull request is the deployable unit
+- release and deployment is driven from the pull request and a pull request is the deployable unit
   - each release is tied to a pull request
-  - a roll back involves re-deploying a previous pull request
-- the same release artifact that is deployed to the pre-production environment for verification is deployed to the production environment
-
+  - a [roll back involves re-deploying a previous pull request](./docs/workflows.md#rollback-production-deploy)
+- the exact same release that is verified in the pre-production environment is deployed to the production environment
+- pull requests move through the pre-production environment and to production one at a time in a continuous deployment style
+- existing tools are used to perform release, deployment, and verification
+  – this workflow simply adds a way to orchestrate this process
 
 ## Usage
 
@@ -77,6 +78,8 @@ request. This will create a release and deploy it to the pre-production
 environment. Then `/passed-qa` or `/failed-qa` should be commented once manual
 verification of the release is complete. Merging the pull request after
 commenting `/qa` will deploy the release to the production environment.
+
+⚠️ It is recommended that the "QA" status check is required in [branch protection](https://help.github.com/en/github/administering-a-repository/about-protected-branches) for the main branch of the reposiory.
 
 ℹ️See also [docs/workflows.md](./docs/workflows.md).
 
