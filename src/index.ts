@@ -42,6 +42,7 @@ import {
   mention,
   success,
   warning,
+  deploymentsLink,
 } from "./comment";
 
 import { Deployment, PullRequest } from "./types";
@@ -677,13 +678,14 @@ const handleRollbackCommand = async (context: Context, pr: PullRequest) => {
   const deployedPrNumber = deploymentPullRequestNumber(currentDeployment);
 
   if (deployedPrNumber !== pr.number) {
-    await comment.append(
+    await comment.append([
       warning(
         `This pull request is not currently deployed to ${code(
           environment
         )} (#${deployedPrNumber} is) - not rolling back.`
-      )
-    );
+      ),
+      deploymentsLink("Latest Deployments"),
+    ]);
     return;
   }
 
@@ -693,13 +695,14 @@ const handleRollbackCommand = async (context: Context, pr: PullRequest) => {
   );
 
   if (!previousDeployment) {
-    await comment.append(
+    await comment.append([
       warning(
         `I was not able to find a previous successful deployment for ${code(
           environment
         )} to roll back to - not rolling back.`
-      )
-    );
+      ),
+      deploymentsLink("Latest Deployments"),
+    ]);
     return;
   }
 
@@ -707,13 +710,14 @@ const handleRollbackCommand = async (context: Context, pr: PullRequest) => {
     previousDeployment
   );
   if (previousDeployedPrNumber === pr.number) {
-    await comment.append(
+    await comment.append([
       warning(
         `The previous successful deployment for ${code(
           environment
         )} was also for this pull request - not rolling back.`
-      )
-    );
+      ),
+      deploymentsLink("Latest Deployments"),
+    ]);
     return;
   }
 

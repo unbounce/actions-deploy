@@ -1763,6 +1763,10 @@ exports.runLink = (text) => {
     const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}?check_suite_focus=true`;
     return exports.link(text, url);
 };
+exports.deploymentsLink = (text) => {
+    const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/deployments`;
+    return exports.link(text, url);
+};
 exports.link = (text, url) => {
     return `[${text}](${url})`;
 };
@@ -26778,17 +26782,26 @@ const handleRollbackCommand = async (context, pr) => {
     const currentDeployment = await utils_1.findDeployment(context, environment);
     const deployedPrNumber = utils_1.deploymentPullRequestNumber(currentDeployment);
     if (deployedPrNumber !== pr.number) {
-        await comment.append(comment_1.warning(`This pull request is not currently deployed to ${comment_1.code(environment)} (#${deployedPrNumber} is) - not rolling back.`));
+        await comment.append([
+            comment_1.warning(`This pull request is not currently deployed to ${comment_1.code(environment)} (#${deployedPrNumber} is) - not rolling back.`),
+            comment_1.deploymentsLink("Latest Deployments"),
+        ]);
         return;
     }
     const previousDeployment = await utils_1.findPreviousSuccessfulDeployment(context, environment);
     if (!previousDeployment) {
-        await comment.append(comment_1.warning(`I was not able to find a previous successful deployment for ${comment_1.code(environment)} to roll back to - not rolling back.`));
+        await comment.append([
+            comment_1.warning(`I was not able to find a previous successful deployment for ${comment_1.code(environment)} to roll back to - not rolling back.`),
+            comment_1.deploymentsLink("Latest Deployments"),
+        ]);
         return;
     }
     const previousDeployedPrNumber = utils_1.deploymentPullRequestNumber(previousDeployment);
     if (previousDeployedPrNumber === pr.number) {
-        await comment.append(comment_1.warning(`The previous successful deployment for ${comment_1.code(environment)} was also for this pull request - not rolling back.`));
+        await comment.append([
+            comment_1.warning(`The previous successful deployment for ${comment_1.code(environment)} was also for this pull request - not rolling back.`),
+            comment_1.deploymentsLink("Latest Deployments"),
+        ]);
         return;
     }
     await setup(comment);
