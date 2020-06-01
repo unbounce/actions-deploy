@@ -26783,7 +26783,12 @@ const handleRollbackCommand = async (context, pr) => {
     }
     const previousDeployment = await utils_1.findPreviousSuccessfulDeployment(context, environment);
     if (!previousDeployment) {
-        await comment.append(comment_1.warning(`I was not able to find a previous successful deployment for ${comment_1.code(environment)} to roll back to.`));
+        await comment.append(comment_1.warning(`I was not able to find a previous successful deployment for ${comment_1.code(environment)} to roll back to - not rolling back.`));
+        return;
+    }
+    const previousDeployedPrNumber = utils_1.deploymentPullRequestNumber(previousDeployment);
+    if (previousDeployedPrNumber === pr.number) {
+        await comment.append(comment_1.warning(`The previous successful deployment for ${comment_1.code(environment)} was also for this pull request - not rolling back.`));
         return;
     }
     await rollback(context, comment, pr, previousDeployment);
