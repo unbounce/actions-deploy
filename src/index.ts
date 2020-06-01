@@ -14,6 +14,7 @@ import {
   findDeployment,
   findLastDeploymentForPullRequest,
   findPreviousDeployment,
+  findFirstDeploymentForRelease,
   getDeploymentStatus,
   handleError,
   looksLikeACommand,
@@ -37,6 +38,7 @@ import {
   error,
   info,
   logToDetails,
+  link,
   mention,
   success,
   warning,
@@ -263,6 +265,9 @@ const handlePrMerged = async (
         }
 
         const previousVersion = previousDeployment.ref;
+        const previousPrNumber = deploymentPullRequestNumber(
+          previousDeployment
+        );
 
         await comment.append(
           warning(
@@ -287,6 +292,16 @@ const handlePrMerged = async (
             "failed to checkout to previous deployed version",
             e
           );
+        }
+
+        if (previousPrNumber) {
+          const previousPrMessage = `Deploy ${maybeComponentName()}${version} to ${code(
+            environment
+          )} triggered via #${pr.number} due to ${link(
+            "rollback",
+            comment.url
+          )}.`;
+          await Comment.create(context, previousPrNumber, previousPrMessage);
         }
 
         await createDeploymentAndSetStatus(
@@ -617,6 +632,16 @@ const handleDeployCommand = async (
   );
 
   await setup(comment);
+
+  // Cross-notify if release came from another PR
+  const firstDeployment = await findFirstDeploymentForRelease(context, version);
+  const firstDeploymentPrNumber = deploymentPullRequestNumber(firstDeployment);
+  if (firstDeploymentPrNumber && firstDeploymentPrNumber !== pr.number) {
+    const otherPrMessage = `Deploy ${maybeComponentName()}${version} to ${code(
+      environment
+    )} triggered via ${link(code("/deploy"), comment.url)}.`;
+    await Comment.create(context, firstDeploymentPrNumber, otherPrMessage);
+  }
 
   await createDeploymentAndSetStatus(
     context,

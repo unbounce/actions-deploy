@@ -172,6 +172,20 @@ export const findLastDeploymentForPullRequest = async (
   return undefined;
 };
 
+export const findFirstDeploymentForRelease = async (
+  context: Context,
+  ref: string
+) => {
+  const deployments = await context.github.repos.listDeployments(
+    context.repo({ ref })
+  );
+  if (deployments.data.length > 0) {
+    return deployments.data[deployments.data.length - 1];
+  } else {
+    return undefined;
+  }
+};
+
 export const pullRequestHasBeenDeployed = async (
   context: Context,
   prNumber: number
