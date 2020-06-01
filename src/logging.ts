@@ -10,7 +10,7 @@ const prettyStringify = (thing: any) => {
   return String(thing);
 };
 
-const stringifyArgs = (...args: any[]) => args.map(prettyStringify).join("\n");
+const stringifyArgs = (args: any[]) => args.map(prettyStringify).join("\n");
 
 export const warning = (...args: any[]) =>
   console.log(`::warning ${stringifyArgs(args)}`);
