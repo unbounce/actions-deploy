@@ -1761,6 +1761,9 @@ exports.code = (body) => {
 exports.quote = (body) => `> ${body}`;
 exports.runLink = (text) => {
     const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}?check_suite_focus=true`;
+    return exports.link(text, url);
+};
+exports.link = (text, url) => {
     return `[${text}](${url})`;
 };
 const createLogToDetailsParser = () => {
@@ -1819,6 +1822,7 @@ class Comment {
         this.issueNumber = issueNumber;
         this.lines = [];
         this.header = [];
+        this.url = "";
         if (config_1.config.componentName) {
             this.header = [exports.quote(exports.info(exports.code(config_1.config.componentName)))];
         }
@@ -1862,6 +1866,8 @@ class Comment {
         });
         const comment = await this.context.github.issues.createComment(params);
         this.id = comment.data.id;
+        this.url = comment.data.html_url;
+        return comment;
     }
 }
 exports.Comment = Comment;
@@ -26536,7 +26542,25 @@ const handlePrMerged = async (context, pr) => {
                 throw e;
             }
             const previousVersion = previousDeployment.ref;
+            const previousPrNumber = utils_1.deploymentPullRequestNumber(previousDeployment);
             await comment.append(comment_1.warning(`Rolling back ${utils_1.maybeComponentName()}${comment_1.code(environment)} to ${previousVersion}...`));
+            // Switch to the commit the previous release before deploying.
+            //
+            // NOTE That this isn't guaranteed to be the commit that was used to
+            // deploy this version to production (as /deploy <environment> <version>
+            // could have been used on a commit that was not `previousVersion`), but
+            // this is likely to be correct in most cases, and is definitely more
+            // correct that using the current commit to deploy `previousVersion`.
+            try {
+                await git_1.checkout(previousVersion);
+            }
+            catch (e) {
+                await utils_1.handleError(comment, "failed to checkout to previous deployed version", e);
+            }
+            if (previousPrNumber) {
+                const previousPrMessage = `Deploy ${utils_1.maybeComponentName()}${version} to ${comment_1.code(environment)} triggered via #${pr.number} due to ${comment_1.link("rollback", comment.url)}.`;
+                await comment_1.Comment.create(context, previousPrNumber, previousPrMessage);
+            }
             await createDeploymentAndSetStatus(context, previousVersion, environment, { pr: utils_1.deploymentPullRequestNumber(previousDeployment) }, async () => {
                 await deploy(comment, previousVersion, environment);
                 await verify(comment, previousVersion, environment);
@@ -26717,7 +26741,7 @@ const handleVerifyCommand = async (context, pr, providedEnvironment) => {
 };
 const handleDeployCommand = async (context, pr, providedEnvironment, providedVersion) => {
     const environment = providedEnvironment || config_1.config.preProductionEnvironment;
-    const deployment = await utils_1.findLastDeploymentForPullRequest(context, pr.number);
+    const deployment = await utils_1.findLastDeploymentForPullRequest(context, config_1.config.preProductionEnvironment, pr.number);
     const comment = new comment_1.Comment(context, context.issue().number);
     if (!deployment) {
         await comment.append([
@@ -26730,6 +26754,13 @@ const handleDeployCommand = async (context, pr, providedEnvironment, providedVer
     const version = providedVersion || deployment.ref;
     await comment.append(`Running ${comment_1.code(`/deploy ${environment} ${version}`)}...`);
     await setup(comment);
+    // Cross-notify if release came from another PR
+    const firstDeployment = await utils_1.findFirstDeploymentForRelease(context, config_1.config.preProductionEnvironment, version);
+    const firstDeploymentPrNumber = utils_1.deploymentPullRequestNumber(firstDeployment);
+    if (firstDeploymentPrNumber && firstDeploymentPrNumber !== pr.number) {
+        const otherPrMessage = `Deploy ${utils_1.maybeComponentName()}${version} to ${comment_1.code(environment)} triggered via ${comment_1.link(comment_1.code("/deploy"), comment.url)}.`;
+        await comment_1.Comment.create(context, firstDeploymentPrNumber, otherPrMessage);
+    }
     await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
         await release(comment, version);
         await deploy(comment, version, environment);
@@ -26789,7 +26820,7 @@ const probot = (app) => {
             }
             case utils_1.commandMatches(context, "failed-qa"): {
                 await utils_1.reactToComment(context, "eyes");
-                if (await utils_1.pullRequestHasBeenDeployed(context, pr.data.number)) {
+                if (await utils_1.pullRequestHasBeenDeployed(context, config_1.config.preProductionEnvironment, pr.data.number)) {
                     await utils_1.setCommitStatus(context, pr.data, "failure");
                 }
                 else {
@@ -26799,7 +26830,7 @@ const probot = (app) => {
             }
             case utils_1.commandMatches(context, "passed-qa"): {
                 await utils_1.reactToComment(context, "eyes");
-                if (await utils_1.pullRequestHasBeenDeployed(context, pr.data.number)) {
+                if (await utils_1.pullRequestHasBeenDeployed(context, config_1.config.preProductionEnvironment, pr.data.number)) {
                     await utils_1.setCommitStatus(context, pr.data, "success");
                 }
                 else {
@@ -37679,19 +37710,29 @@ exports.findPreviousDeployment = async (context, environment) => {
         return undefined;
     }
 };
-exports.findLastDeploymentForPullRequest = async (context, prNumber) => {
+exports.findLastDeploymentForPullRequest = async (context, environment, prNumber) => {
     const commits = await context.github.pulls.listCommits(context.repo({ pull_number: prNumber }));
     for (let i = commits.data.length - 1; i >= 0; i--) {
         const { sha } = commits.data[i];
-        const deployments = await context.github.repos.listDeployments(context.repo({ sha }));
+        const deployments = await context.github.repos.listDeployments(context.repo({ sha, environment: exports.environmentWithComponent(environment) }));
         if (deployments.data.length > 0) {
             return deployments.data[0];
         }
     }
     return undefined;
 };
-exports.pullRequestHasBeenDeployed = async (context, prNumber) => {
-    return ((await exports.findLastDeploymentForPullRequest(context, prNumber)) !== undefined);
+exports.findFirstDeploymentForRelease = async (context, environment, ref) => {
+    const deployments = await context.github.repos.listDeployments(context.repo({ ref, environment: exports.environmentWithComponent(environment) }));
+    if (deployments.data.length > 0) {
+        return deployments.data[deployments.data.length - 1];
+    }
+    else {
+        return undefined;
+    }
+};
+exports.pullRequestHasBeenDeployed = async (context, environment, prNumber) => {
+    return ((await exports.findLastDeploymentForPullRequest(context, environment, prNumber)) !==
+        undefined);
 };
 exports.setDeploymentStatus = (context, deploymentId, state) => context.github.repos.createDeploymentStatus(context.repo({ deployment_id: deploymentId, state }));
 exports.getDeploymentStatus = async (context, deploymentId) => {
@@ -97041,6 +97082,7 @@ exports.checkoutPullRequest = (pr) => {
         `git checkout ${ref}`,
     ]);
 };
+exports.checkout = (ref) => shell_1.shell(["git fetch origin", `git checkout ${ref}`]);
 exports.updatePullRequest = async (pr) => {
     const currentBranch = pr.head.ref;
     const baseBranch = pr.base.ref;

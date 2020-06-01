@@ -31,6 +31,10 @@ export const quote = (body: string) => `> ${body}`;
 
 export const runLink = (text: string) => {
   const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}?check_suite_focus=true`;
+  return link(text, url);
+};
+
+export const link = (text: string, url: string) => {
   return `[${text}](${url})`;
 };
 
@@ -100,6 +104,7 @@ export class Comment {
   private lines: string[] = [];
   private header: string[] = [];
   private footer: string[];
+  public url: string = "";
 
   constructor(private context: Context, private issueNumber: number) {
     if (config.componentName) {
@@ -155,5 +160,7 @@ export class Comment {
     });
     const comment = await this.context.github.issues.createComment(params);
     this.id = comment.data.id;
+    this.url = comment.data.html_url;
+    return comment;
   }
 }

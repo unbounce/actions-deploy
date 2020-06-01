@@ -14,6 +14,7 @@ import {
   findDeployment,
   findLastDeploymentForPullRequest,
   findPreviousDeployment,
+  findFirstDeploymentForRelease,
   getDeploymentStatus,
   handleError,
   looksLikeACommand,
@@ -25,13 +26,19 @@ import {
 } from "./utils";
 import * as log from "./logging";
 import { shell } from "./shell";
-import { getShortSha, checkoutPullRequest, updatePullRequest } from "./git";
+import {
+  getShortSha,
+  checkout,
+  checkoutPullRequest,
+  updatePullRequest,
+} from "./git";
 import {
   Comment,
   code,
   error,
   info,
   logToDetails,
+  link,
   mention,
   success,
   warning,
@@ -258,6 +265,10 @@ const handlePrMerged = async (
         }
 
         const previousVersion = previousDeployment.ref;
+        const previousPrNumber = deploymentPullRequestNumber(
+          previousDeployment
+        );
+
         await comment.append(
           warning(
             `Rolling back ${maybeComponentName()}${code(
@@ -265,6 +276,34 @@ const handlePrMerged = async (
             )} to ${previousVersion}...`
           )
         );
+
+        // Switch to the commit the previous release before deploying.
+        //
+        // NOTE That this isn't guaranteed to be the commit that was used to
+        // deploy this version to production (as /deploy <environment> <version>
+        // could have been used on a commit that was not `previousVersion`), but
+        // this is likely to be correct in most cases, and is definitely more
+        // correct that using the current commit to deploy `previousVersion`.
+        try {
+          await checkout(previousVersion);
+        } catch (e) {
+          await handleError(
+            comment,
+            "failed to checkout to previous deployed version",
+            e
+          );
+        }
+
+        if (previousPrNumber) {
+          const previousPrMessage = `Deploy ${maybeComponentName()}${version} to ${code(
+            environment
+          )} triggered via #${pr.number} due to ${link(
+            "rollback",
+            comment.url
+          )}.`;
+          await Comment.create(context, previousPrNumber, previousPrMessage);
+        }
+
         await createDeploymentAndSetStatus(
           context,
           previousVersion,
@@ -572,7 +611,11 @@ const handleDeployCommand = async (
   providedVersion?: string
 ) => {
   const environment = providedEnvironment || config.preProductionEnvironment;
-  const deployment = await findLastDeploymentForPullRequest(context, pr.number);
+  const deployment = await findLastDeploymentForPullRequest(
+    context,
+    config.preProductionEnvironment,
+    pr.number
+  );
 
   const comment = new Comment(context, context.issue().number);
 
@@ -593,6 +636,20 @@ const handleDeployCommand = async (
   );
 
   await setup(comment);
+
+  // Cross-notify if release came from another PR
+  const firstDeployment = await findFirstDeploymentForRelease(
+    context,
+    config.preProductionEnvironment,
+    version
+  );
+  const firstDeploymentPrNumber = deploymentPullRequestNumber(firstDeployment);
+  if (firstDeploymentPrNumber && firstDeploymentPrNumber !== pr.number) {
+    const otherPrMessage = `Deploy ${maybeComponentName()}${version} to ${code(
+      environment
+    )} triggered via ${link(code("/deploy"), comment.url)}.`;
+    await Comment.create(context, firstDeploymentPrNumber, otherPrMessage);
+  }
 
   await createDeploymentAndSetStatus(
     context,
@@ -690,7 +747,13 @@ const probot = (app: Application) => {
 
       case commandMatches(context, "failed-qa"): {
         await reactToComment(context, "eyes");
-        if (await pullRequestHasBeenDeployed(context, pr.data.number)) {
+        if (
+          await pullRequestHasBeenDeployed(
+            context,
+            config.preProductionEnvironment,
+            pr.data.number
+          )
+        ) {
           await setCommitStatus(context, pr.data, "failure");
         } else {
           await commentPullRequestNotDeployed(context);
@@ -700,7 +763,13 @@ const probot = (app: Application) => {
 
       case commandMatches(context, "passed-qa"): {
         await reactToComment(context, "eyes");
-        if (await pullRequestHasBeenDeployed(context, pr.data.number)) {
+        if (
+          await pullRequestHasBeenDeployed(
+            context,
+            config.preProductionEnvironment,
+            pr.data.number
+          )
+        ) {
           await setCommitStatus(context, pr.data, "success");
         } else {
           await commentPullRequestNotDeployed(context);
