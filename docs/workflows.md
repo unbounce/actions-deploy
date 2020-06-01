@@ -29,10 +29,9 @@
 
 ## Rollback Production Deploy
 
-1. Find the pull request you want to roll back to (typically the previously merged pull request)
-     - You can find a history of deployments and their releated pull request on the "Environments" page of your repository
-1. Comment `/deploy production`
-     - This will run the `deploy` and `verify` commands for the production environment using the latest release for the pull request
+1. Navigate to the pull request that is currently deployed to the production environment
+1. Comment `/rollback`
+     - This will run the `deploy` and `verify` commands for the production environment using the release version from the previous successful production deploy
 
 ## Deploying a Specific Version to an Environment
 
