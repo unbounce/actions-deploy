@@ -149,13 +149,11 @@ export const findPreviousSuccessfulDeployment = async (
     }
 
     // Remove latest deployment
-    deployments.data.unshift();
-
-    for (const deployment of deployments.data) {
-      if ((await getDeploymentStatus(context, deployment.id)) === "success") {
-        return deployment;
-      }
-    }
+    const [, ...rest] = deployments.data;
+    return rest.find(
+      async (deployment) =>
+        (await getDeploymentStatus(context, deployment.id)) === "success"
+    );
   }
   return undefined;
 };
