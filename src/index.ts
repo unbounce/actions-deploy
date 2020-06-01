@@ -13,7 +13,7 @@ import {
   environmentIsAvailable,
   findDeployment,
   findLastDeploymentForPullRequest,
-  findPreviousDeployment,
+  findPreviousSuccessfulDeployment,
   findFirstDeploymentForRelease,
   getDeploymentStatus,
   handleError,
@@ -301,7 +301,7 @@ const handlePrMerged = async (
         await deploy(comment, version, environment);
         await verify(comment, version, environment);
       } catch (e) {
-        const previousDeployment = await findPreviousDeployment(
+        const previousDeployment = await findPreviousSuccessfulDeployment(
           context,
           environment
         );
@@ -310,7 +310,7 @@ const handlePrMerged = async (
         } else {
           await comment.append(
             warning(
-              `Unable to find previous deployment for ${maybeComponentName()}${code(
+              `Unable to find previous successful deployment for ${maybeComponentName()}${code(
                 environment
               )} to roll back to.`
             )
@@ -687,12 +687,15 @@ const handleRollbackCommand = async (context: Context, pr: PullRequest) => {
     return;
   }
 
-  const previousDeployment = await findPreviousDeployment(context, environment);
+  const previousDeployment = await findPreviousSuccessfulDeployment(
+    context,
+    environment
+  );
 
   if (!previousDeployment) {
     await comment.append(
       warning(
-        `I was not able to find a previous deployment for ${code(
+        `I was not able to find a previous successful deployment for ${code(
           environment
         )} to roll back to.`
       )

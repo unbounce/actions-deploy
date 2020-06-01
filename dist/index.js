@@ -26561,12 +26561,12 @@ const handlePrMerged = async (context, pr) => {
             await verify(comment, version, environment);
         }
         catch (e) {
-            const previousDeployment = await utils_1.findPreviousDeployment(context, environment);
+            const previousDeployment = await utils_1.findPreviousSuccessfulDeployment(context, environment);
             if (previousDeployment) {
                 await rollback(context, comment, pr, previousDeployment);
             }
             else {
-                await comment.append(comment_1.warning(`Unable to find previous deployment for ${utils_1.maybeComponentName()}${comment_1.code(environment)} to roll back to.`));
+                await comment.append(comment_1.warning(`Unable to find previous successful deployment for ${utils_1.maybeComponentName()}${comment_1.code(environment)} to roll back to.`));
             }
             // Re-throw so that first deployment is marked as "error"
             throw e;
@@ -26781,9 +26781,9 @@ const handleRollbackCommand = async (context, pr) => {
         await comment.append(comment_1.warning(`This pull request is not currently deployed to ${comment_1.code(environment)} (#${deployedPrNumber} is) - not rolling back.`));
         return;
     }
-    const previousDeployment = await utils_1.findPreviousDeployment(context, environment);
+    const previousDeployment = await utils_1.findPreviousSuccessfulDeployment(context, environment);
     if (!previousDeployment) {
-        await comment.append(comment_1.warning(`I was not able to find a previous deployment for ${comment_1.code(environment)} to roll back to.`));
+        await comment.append(comment_1.warning(`I was not able to find a previous successful deployment for ${comment_1.code(environment)} to roll back to.`));
         return;
     }
     await rollback(context, comment, pr, previousDeployment);
@@ -37716,7 +37716,7 @@ exports.findDeployment = async (context, environment) => {
         return undefined;
     }
 };
-exports.findPreviousDeployment = async (context, environment) => {
+exports.findPreviousSuccessfulDeployment = async (context, environment) => {
     const deployments = await context.github.repos.listDeployments(context.repo({ environment: exports.environmentWithComponent(environment) }));
     if (deployments.data.length > 1) {
         const [latestDeployment, previousDeployment] = deployments.data;
@@ -37731,11 +37731,15 @@ exports.findPreviousDeployment = async (context, environment) => {
         if (latestDeployment.id < previousDeployment.id) {
             throw new Error("GitHub deployments were not returned in reverse order");
         }
-        return previousDeployment;
+        // Remove latest deployment
+        deployments.data.unshift();
+        for (const deployment of deployments.data) {
+            if ((await exports.getDeploymentStatus(context, deployment.id)) === "success") {
+                return deployment;
+            }
+        }
     }
-    else {
-        return undefined;
-    }
+    return undefined;
 };
 exports.findLastDeploymentForPullRequest = async (context, environment, prNumber) => {
     const commits = await context.github.pulls.listCommits(context.repo({ pull_number: prNumber }));
