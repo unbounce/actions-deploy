@@ -97054,7 +97054,7 @@ exports.checkoutPullRequest = (pr) => {
         `git checkout ${ref}`,
     ]);
 };
-exports.checkout = (ref) => shell_1.shell([`git checkout ${ref}`]);
+exports.checkout = (ref) => shell_1.shell(["git fetch origin", `git checkout ${ref}`]);
 exports.updatePullRequest = async (pr) => {
     const currentBranch = pr.head.ref;
     const baseBranch = pr.base.ref;

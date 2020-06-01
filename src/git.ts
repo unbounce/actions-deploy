@@ -10,7 +10,8 @@ export const checkoutPullRequest = (pr: PullRequest) => {
   ]);
 };
 
-export const checkout = (ref: string) => shell([`git checkout ${ref}`]);
+export const checkout = (ref: string) =>
+  shell(["git fetch origin", `git checkout ${ref}`]);
 
 export const updatePullRequest = async (pr: PullRequest) => {
   const currentBranch = pr.head.ref;
