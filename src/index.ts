@@ -611,7 +611,11 @@ const handleDeployCommand = async (
   providedVersion?: string
 ) => {
   const environment = providedEnvironment || config.preProductionEnvironment;
-  const deployment = await findLastDeploymentForPullRequest(context, pr.number);
+  const deployment = await findLastDeploymentForPullRequest(
+    context,
+    config.preProductionEnvironment,
+    pr.number
+  );
 
   const comment = new Comment(context, context.issue().number);
 
@@ -634,7 +638,11 @@ const handleDeployCommand = async (
   await setup(comment);
 
   // Cross-notify if release came from another PR
-  const firstDeployment = await findFirstDeploymentForRelease(context, version);
+  const firstDeployment = await findFirstDeploymentForRelease(
+    context,
+    config.preProductionEnvironment,
+    version
+  );
   const firstDeploymentPrNumber = deploymentPullRequestNumber(firstDeployment);
   if (firstDeploymentPrNumber && firstDeploymentPrNumber !== pr.number) {
     const otherPrMessage = `Deploy ${maybeComponentName()}${version} to ${code(
@@ -739,7 +747,13 @@ const probot = (app: Application) => {
 
       case commandMatches(context, "failed-qa"): {
         await reactToComment(context, "eyes");
-        if (await pullRequestHasBeenDeployed(context, pr.data.number)) {
+        if (
+          await pullRequestHasBeenDeployed(
+            context,
+            config.preProductionEnvironment,
+            pr.data.number
+          )
+        ) {
           await setCommitStatus(context, pr.data, "failure");
         } else {
           await commentPullRequestNotDeployed(context);
@@ -749,7 +763,13 @@ const probot = (app: Application) => {
 
       case commandMatches(context, "passed-qa"): {
         await reactToComment(context, "eyes");
-        if (await pullRequestHasBeenDeployed(context, pr.data.number)) {
+        if (
+          await pullRequestHasBeenDeployed(
+            context,
+            config.preProductionEnvironment,
+            pr.data.number
+          )
+        ) {
           await setCommitStatus(context, pr.data, "success");
         } else {
           await commentPullRequestNotDeployed(context);

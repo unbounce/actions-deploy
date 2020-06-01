@@ -155,6 +155,7 @@ export const findPreviousDeployment = async (
 
 export const findLastDeploymentForPullRequest = async (
   context: Context,
+  environment: string,
   prNumber: number
 ) => {
   const commits = await context.github.pulls.listCommits(
@@ -163,7 +164,7 @@ export const findLastDeploymentForPullRequest = async (
   for (let i = commits.data.length - 1; i >= 0; i--) {
     const { sha } = commits.data[i];
     const deployments = await context.github.repos.listDeployments(
-      context.repo({ sha })
+      context.repo({ sha, environment: environmentWithComponent(environment) })
     );
     if (deployments.data.length > 0) {
       return deployments.data[0];
@@ -174,10 +175,11 @@ export const findLastDeploymentForPullRequest = async (
 
 export const findFirstDeploymentForRelease = async (
   context: Context,
+  environment: string,
   ref: string
 ) => {
   const deployments = await context.github.repos.listDeployments(
-    context.repo({ ref })
+    context.repo({ ref, environment: environmentWithComponent(environment) })
   );
   if (deployments.data.length > 0) {
     return deployments.data[deployments.data.length - 1];
@@ -188,10 +190,12 @@ export const findFirstDeploymentForRelease = async (
 
 export const pullRequestHasBeenDeployed = async (
   context: Context,
+  environment: string,
   prNumber: number
 ) => {
   return (
-    (await findLastDeploymentForPullRequest(context, prNumber)) !== undefined
+    (await findLastDeploymentForPullRequest(context, environment, prNumber)) !==
+    undefined
   );
 };
 

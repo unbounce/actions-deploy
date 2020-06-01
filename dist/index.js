@@ -26741,7 +26741,7 @@ const handleVerifyCommand = async (context, pr, providedEnvironment) => {
 };
 const handleDeployCommand = async (context, pr, providedEnvironment, providedVersion) => {
     const environment = providedEnvironment || config_1.config.preProductionEnvironment;
-    const deployment = await utils_1.findLastDeploymentForPullRequest(context, pr.number);
+    const deployment = await utils_1.findLastDeploymentForPullRequest(context, config_1.config.preProductionEnvironment, pr.number);
     const comment = new comment_1.Comment(context, context.issue().number);
     if (!deployment) {
         await comment.append([
@@ -26755,7 +26755,7 @@ const handleDeployCommand = async (context, pr, providedEnvironment, providedVer
     await comment.append(`Running ${comment_1.code(`/deploy ${environment} ${version}`)}...`);
     await setup(comment);
     // Cross-notify if release came from another PR
-    const firstDeployment = await utils_1.findFirstDeploymentForRelease(context, version);
+    const firstDeployment = await utils_1.findFirstDeploymentForRelease(context, config_1.config.preProductionEnvironment, version);
     const firstDeploymentPrNumber = utils_1.deploymentPullRequestNumber(firstDeployment);
     if (firstDeploymentPrNumber && firstDeploymentPrNumber !== pr.number) {
         const otherPrMessage = `Deploy ${utils_1.maybeComponentName()}${version} to ${comment_1.code(environment)} triggered via ${comment_1.link(comment_1.code("/deploy"), comment.url)}.`;
@@ -26820,7 +26820,7 @@ const probot = (app) => {
             }
             case utils_1.commandMatches(context, "failed-qa"): {
                 await utils_1.reactToComment(context, "eyes");
-                if (await utils_1.pullRequestHasBeenDeployed(context, pr.data.number)) {
+                if (await utils_1.pullRequestHasBeenDeployed(context, config_1.config.preProductionEnvironment, pr.data.number)) {
                     await utils_1.setCommitStatus(context, pr.data, "failure");
                 }
                 else {
@@ -26830,7 +26830,7 @@ const probot = (app) => {
             }
             case utils_1.commandMatches(context, "passed-qa"): {
                 await utils_1.reactToComment(context, "eyes");
-                if (await utils_1.pullRequestHasBeenDeployed(context, pr.data.number)) {
+                if (await utils_1.pullRequestHasBeenDeployed(context, config_1.config.preProductionEnvironment, pr.data.number)) {
                     await utils_1.setCommitStatus(context, pr.data, "success");
                 }
                 else {
@@ -37710,19 +37710,19 @@ exports.findPreviousDeployment = async (context, environment) => {
         return undefined;
     }
 };
-exports.findLastDeploymentForPullRequest = async (context, prNumber) => {
+exports.findLastDeploymentForPullRequest = async (context, environment, prNumber) => {
     const commits = await context.github.pulls.listCommits(context.repo({ pull_number: prNumber }));
     for (let i = commits.data.length - 1; i >= 0; i--) {
         const { sha } = commits.data[i];
-        const deployments = await context.github.repos.listDeployments(context.repo({ sha }));
+        const deployments = await context.github.repos.listDeployments(context.repo({ sha, environment: exports.environmentWithComponent(environment) }));
         if (deployments.data.length > 0) {
             return deployments.data[0];
         }
     }
     return undefined;
 };
-exports.findFirstDeploymentForRelease = async (context, ref) => {
-    const deployments = await context.github.repos.listDeployments(context.repo({ ref }));
+exports.findFirstDeploymentForRelease = async (context, environment, ref) => {
+    const deployments = await context.github.repos.listDeployments(context.repo({ ref, environment: exports.environmentWithComponent(environment) }));
     if (deployments.data.length > 0) {
         return deployments.data[deployments.data.length - 1];
     }
@@ -37730,8 +37730,9 @@ exports.findFirstDeploymentForRelease = async (context, ref) => {
         return undefined;
     }
 };
-exports.pullRequestHasBeenDeployed = async (context, prNumber) => {
-    return ((await exports.findLastDeploymentForPullRequest(context, prNumber)) !== undefined);
+exports.pullRequestHasBeenDeployed = async (context, environment, prNumber) => {
+    return ((await exports.findLastDeploymentForPullRequest(context, environment, prNumber)) !==
+        undefined);
 };
 exports.setDeploymentStatus = (context, deploymentId, state) => context.github.repos.createDeploymentStatus(context.repo({ deployment_id: deploymentId, state }));
 exports.getDeploymentStatus = async (context, deploymentId) => {
