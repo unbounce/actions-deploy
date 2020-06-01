@@ -125,6 +125,7 @@ Release and deployment automation is driven by commenting on the pull request.
 |`/verify`, `/verify <environment>`|(Re-)run `verify` command against an environment (environment defatuls to pre-production environment)|
 |`/deploy`, `/deploy <environment>`, `/deploy <environment> <version>`|(Re-)deploy a release to an environment and run `verify` command - `/qa` must have already been run on the pull request (environment defaults to pre-production environment, version defaults to latest release for the pull request)|
 |`/rollback`|If a pull request is the latest to be deployed to the production environment, this command will roll back the production environment to the previous version|
+|`/help`|Show help message|
 
 ### Configuration
 
