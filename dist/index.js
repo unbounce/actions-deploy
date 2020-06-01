@@ -26791,6 +26791,7 @@ const handleRollbackCommand = async (context, pr) => {
         await comment.append(comment_1.warning(`The previous successful deployment for ${comment_1.code(environment)} was also for this pull request - not rolling back.`));
         return;
     }
+    await setup(comment);
     await rollback(context, comment, pr, previousDeployment);
 };
 const commentPullRequestNotDeployed = async (context) => {

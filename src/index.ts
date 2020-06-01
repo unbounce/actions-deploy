@@ -717,6 +717,7 @@ const handleRollbackCommand = async (context: Context, pr: PullRequest) => {
     return;
   }
 
+  await setup(comment);
   await rollback(context, comment, pr, previousDeployment);
 };
 
