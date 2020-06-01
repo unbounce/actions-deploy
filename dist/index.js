@@ -26504,6 +26504,33 @@ const verify = async (comment, version, environment) => {
         throw e;
     }
 };
+const rollback = async (context, comment, pr, previousDeployment) => {
+    const environment = config_1.config.productionEnvironment;
+    const previousVersion = previousDeployment.ref;
+    const previousPrNumber = utils_1.deploymentPullRequestNumber(previousDeployment);
+    await comment.append(comment_1.warning(`Rolling back ${utils_1.maybeComponentName()}${comment_1.code(environment)} to ${previousVersion}...`));
+    // Switch to the commit the previous release before deploying.
+    //
+    // NOTE That this isn't guaranteed to be the commit that was used to
+    // deploy this version to production (as /deploy <environment> <version>
+    // could have been used on a commit that was not `previousVersion`), but
+    // this is likely to be correct in most cases, and is definitely more
+    // correct that using the current commit to deploy `previousVersion`.
+    try {
+        await git_1.checkout(previousVersion);
+    }
+    catch (e) {
+        await utils_1.handleError(comment, "failed to checkout to previous deployed version", e);
+    }
+    if (previousPrNumber) {
+        const previousPrMessage = `Deploy ${utils_1.maybeComponentName()}${previousVersion} to ${comment_1.code(environment)} triggered via #${pr.number} due to ${comment_1.link("rollback", comment.url)}.`;
+        await comment_1.Comment.create(context, previousPrNumber, previousPrMessage);
+    }
+    await createDeploymentAndSetStatus(context, previousVersion, environment, { pr: utils_1.deploymentPullRequestNumber(previousDeployment) }, async () => {
+        await deploy(comment, previousVersion, environment);
+        await verify(comment, previousVersion, environment);
+    });
+};
 // If the PR was deployed to pre-production, then deploy it to production
 const handlePrMerged = async (context, pr) => {
     const { productionEnvironment, preProductionEnvironment } = config_1.config;
@@ -26529,42 +26556,18 @@ const handlePrMerged = async (context, pr) => {
     const version = deployment.ref;
     const environment = productionEnvironment;
     await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
-        await deploy(comment, version, environment);
         try {
+            await deploy(comment, version, environment);
             await verify(comment, version, environment);
         }
         catch (e) {
-            // Rollback
             const previousDeployment = await utils_1.findPreviousDeployment(context, environment);
-            if (!previousDeployment) {
+            if (previousDeployment) {
+                await rollback(context, comment, pr, previousDeployment);
+            }
+            else {
                 await comment.append(comment_1.warning(`Unable to find previous deployment for ${utils_1.maybeComponentName()}${comment_1.code(environment)} to roll back to.`));
-                // Re-throw so that first deployment is marked as "error"
-                throw e;
             }
-            const previousVersion = previousDeployment.ref;
-            const previousPrNumber = utils_1.deploymentPullRequestNumber(previousDeployment);
-            await comment.append(comment_1.warning(`Rolling back ${utils_1.maybeComponentName()}${comment_1.code(environment)} to ${previousVersion}...`));
-            // Switch to the commit the previous release before deploying.
-            //
-            // NOTE That this isn't guaranteed to be the commit that was used to
-            // deploy this version to production (as /deploy <environment> <version>
-            // could have been used on a commit that was not `previousVersion`), but
-            // this is likely to be correct in most cases, and is definitely more
-            // correct that using the current commit to deploy `previousVersion`.
-            try {
-                await git_1.checkout(previousVersion);
-            }
-            catch (e) {
-                await utils_1.handleError(comment, "failed to checkout to previous deployed version", e);
-            }
-            if (previousPrNumber) {
-                const previousPrMessage = `Deploy ${utils_1.maybeComponentName()}${version} to ${comment_1.code(environment)} triggered via #${pr.number} due to ${comment_1.link("rollback", comment.url)}.`;
-                await comment_1.Comment.create(context, previousPrNumber, previousPrMessage);
-            }
-            await createDeploymentAndSetStatus(context, previousVersion, environment, { pr: utils_1.deploymentPullRequestNumber(previousDeployment) }, async () => {
-                await deploy(comment, previousVersion, environment);
-                await verify(comment, previousVersion, environment);
-            });
             // Re-throw so that first deployment is marked as "error"
             throw e;
         }
@@ -26768,6 +26771,23 @@ const handleDeployCommand = async (context, pr, providedEnvironment, providedVer
         await comment.append(comment_1.success("Done"));
     });
 };
+const handleRollbackCommand = async (context, pr) => {
+    const comment = new comment_1.Comment(context, context.issue().number);
+    await comment.append(`Running ${comment_1.code(`/rollback`)}...`);
+    const environment = config_1.config.productionEnvironment;
+    const currentDeployment = await utils_1.findDeployment(context, environment);
+    const deployedPrNumber = utils_1.deploymentPullRequestNumber(currentDeployment);
+    if (deployedPrNumber !== pr.number) {
+        await comment.append(comment_1.warning(`This pull request is not currently deployed to ${comment_1.code(environment)} (#${deployedPrNumber} is) - not rolling back.`));
+        return;
+    }
+    const previousDeployment = await utils_1.findPreviousDeployment(context, environment);
+    if (!previousDeployment) {
+        await comment.append(comment_1.warning(`I was not able to find a previous deployment for ${comment_1.code(environment)} to roll back to.`));
+        return;
+    }
+    await rollback(context, comment, pr, previousDeployment);
+};
 const commentPullRequestNotDeployed = async (context) => {
     return comment_1.Comment.create(context, context.issue().number, `This pull request has not been deployed yet. You can use ${comment_1.code("/qa")} to deploy it to ${comment_1.code(config_1.config.preProductionEnvironment)} or ${comment_1.code("/skip-qa")} to not deploy this pull request.`);
 };
@@ -26851,6 +26871,13 @@ const probot = (app) => {
                 await Promise.all([
                     utils_1.reactToComment(context, "eyes"),
                     handleDeployCommand(context, pr.data, providedEnvironment, providedVersion),
+                ]);
+                break;
+            }
+            case utils_1.commandMatches(context, "rollback"): {
+                await Promise.all([
+                    utils_1.reactToComment(context, "eyes"),
+                    handleRollbackCommand(context, pr.data),
                 ]);
                 break;
             }
