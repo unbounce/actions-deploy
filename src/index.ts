@@ -13,7 +13,7 @@ import {
   environmentIsAvailable,
   findDeployment,
   findLastDeploymentForPullRequest,
-  findPreviousDeployment,
+  findPreviousSuccessfulDeployment,
   findFirstDeploymentForRelease,
   getDeploymentStatus,
   handleError,
@@ -42,9 +42,10 @@ import {
   mention,
   success,
   warning,
+  deploymentsLink,
 } from "./comment";
 
-import { PullRequest } from "./types";
+import { Deployment, PullRequest } from "./types";
 
 const createDeploymentAndSetStatus = async (
   context: Context,
@@ -186,6 +187,60 @@ const verify = async (
   }
 };
 
+const rollback = async (
+  context: Context,
+  comment: Comment,
+  pr: PullRequest,
+  previousDeployment: Deployment
+) => {
+  const environment = config.productionEnvironment;
+  const previousVersion = previousDeployment.ref;
+  const previousPrNumber = deploymentPullRequestNumber(previousDeployment);
+
+  await comment.append(
+    warning(
+      `Rolling back ${maybeComponentName()}${code(
+        environment
+      )} to ${previousVersion}...`
+    )
+  );
+
+  // Switch to the commit the previous release before deploying.
+  //
+  // NOTE That this isn't guaranteed to be the commit that was used to
+  // deploy this version to production (as /deploy <environment> <version>
+  // could have been used on a commit that was not `previousVersion`), but
+  // this is likely to be correct in most cases, and is definitely more
+  // correct that using the current commit to deploy `previousVersion`.
+  try {
+    await checkout(previousVersion);
+  } catch (e) {
+    await handleError(
+      comment,
+      "failed to checkout to previous deployed version",
+      e
+    );
+  }
+
+  if (previousPrNumber) {
+    const previousPrMessage = `Deploy ${maybeComponentName()}${previousVersion} to ${code(
+      environment
+    )} triggered via #${pr.number} due to ${link("rollback", comment.url)}.`;
+    await Comment.create(context, previousPrNumber, previousPrMessage);
+  }
+
+  await createDeploymentAndSetStatus(
+    context,
+    previousVersion,
+    environment,
+    { pr: deploymentPullRequestNumber(previousDeployment) },
+    async () => {
+      await deploy(comment, previousVersion, environment);
+      await verify(comment, previousVersion, environment);
+    }
+  );
+};
+
 // If the PR was deployed to pre-production, then deploy it to production
 const handlePrMerged = async (
   context: Context<Webhooks.WebhookPayloadPullRequest>,
@@ -243,77 +298,26 @@ const handlePrMerged = async (
     environment,
     { pr: pr.number },
     async () => {
-      await deploy(comment, version, environment);
       try {
+        await deploy(comment, version, environment);
         await verify(comment, version, environment);
       } catch (e) {
-        // Rollback
-        const previousDeployment = await findPreviousDeployment(
+        const previousDeployment = await findPreviousSuccessfulDeployment(
           context,
           environment
         );
-        if (!previousDeployment) {
+        if (previousDeployment) {
+          await rollback(context, comment, pr, previousDeployment);
+        } else {
           await comment.append(
             warning(
-              `Unable to find previous deployment for ${maybeComponentName()}${code(
+              `Unable to find previous successful deployment for ${maybeComponentName()}${code(
                 environment
               )} to roll back to.`
             )
           );
-          // Re-throw so that first deployment is marked as "error"
-          throw e;
         }
 
-        const previousVersion = previousDeployment.ref;
-        const previousPrNumber = deploymentPullRequestNumber(
-          previousDeployment
-        );
-
-        await comment.append(
-          warning(
-            `Rolling back ${maybeComponentName()}${code(
-              environment
-            )} to ${previousVersion}...`
-          )
-        );
-
-        // Switch to the commit the previous release before deploying.
-        //
-        // NOTE That this isn't guaranteed to be the commit that was used to
-        // deploy this version to production (as /deploy <environment> <version>
-        // could have been used on a commit that was not `previousVersion`), but
-        // this is likely to be correct in most cases, and is definitely more
-        // correct that using the current commit to deploy `previousVersion`.
-        try {
-          await checkout(previousVersion);
-        } catch (e) {
-          await handleError(
-            comment,
-            "failed to checkout to previous deployed version",
-            e
-          );
-        }
-
-        if (previousPrNumber) {
-          const previousPrMessage = `Deploy ${maybeComponentName()}${version} to ${code(
-            environment
-          )} triggered via #${pr.number} due to ${link(
-            "rollback",
-            comment.url
-          )}.`;
-          await Comment.create(context, previousPrNumber, previousPrMessage);
-        }
-
-        await createDeploymentAndSetStatus(
-          context,
-          previousVersion,
-          environment,
-          { pr: deploymentPullRequestNumber(previousDeployment) },
-          async () => {
-            await deploy(comment, previousVersion, environment);
-            await verify(comment, previousVersion, environment);
-          }
-        );
         // Re-throw so that first deployment is marked as "error"
         throw e;
       }
@@ -665,6 +669,62 @@ const handleDeployCommand = async (
   );
 };
 
+const handleRollbackCommand = async (context: Context, pr: PullRequest) => {
+  const comment = new Comment(context, context.issue().number);
+  await comment.append(`Running ${code(`/rollback`)}...`);
+
+  const environment = config.productionEnvironment;
+  const currentDeployment = await findDeployment(context, environment);
+  const deployedPrNumber = deploymentPullRequestNumber(currentDeployment);
+
+  if (deployedPrNumber !== pr.number) {
+    await comment.append([
+      warning(
+        `This pull request is not currently deployed to ${code(
+          environment
+        )} (#${deployedPrNumber} is) - not rolling back.`
+      ),
+      deploymentsLink("Latest Deployments"),
+    ]);
+    return;
+  }
+
+  const previousDeployment = await findPreviousSuccessfulDeployment(
+    context,
+    environment
+  );
+
+  if (!previousDeployment) {
+    await comment.append([
+      warning(
+        `I was not able to find a previous successful deployment for ${code(
+          environment
+        )} to roll back to - not rolling back.`
+      ),
+      deploymentsLink("Latest Deployments"),
+    ]);
+    return;
+  }
+
+  const previousDeployedPrNumber = deploymentPullRequestNumber(
+    previousDeployment
+  );
+  if (previousDeployedPrNumber === pr.number) {
+    await comment.append([
+      warning(
+        `The previous successful deployment for ${code(
+          environment
+        )} was also for this pull request - not rolling back.`
+      ),
+      deploymentsLink("Latest Deployments"),
+    ]);
+    return;
+  }
+
+  await setup(comment);
+  await rollback(context, comment, pr, previousDeployment);
+};
+
 const commentPullRequestNotDeployed = async (context: Context) => {
   return Comment.create(
     context,
@@ -676,6 +736,12 @@ const commentPullRequestNotDeployed = async (context: Context) => {
     )} to not deploy this pull request.`
   );
 };
+const prIsNotOpen = (context: Context) =>
+  log.debug(
+    `Pull request associated with comment ${JSON.stringify(
+      context.issue()
+    )} is not open - quitting`
+  );
 
 const probot = (app: Application) => {
   // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
@@ -707,14 +773,9 @@ const probot = (app: Application) => {
 
     if (!pr) {
       log.debug(
-        `No pull request associated with comment ${context.issue()} - quitting`
-      );
-      return;
-    }
-
-    if (pr.data.state !== "open") {
-      log.debug(
-        `Pull request associated with comment ${context.issue()} is not open - quitting`
+        `No pull request associated with comment ${JSON.stringify(
+          context.issue()
+        )} - quitting`
       );
       return;
     }
@@ -729,6 +790,9 @@ const probot = (app: Application) => {
 
     switch (true) {
       case commandMatches(context, "skip-qa"): {
+        if (pr.data.state !== "open") {
+          return prIsNotOpen(context);
+        }
         await Promise.all([
           reactToComment(context, "eyes"),
           setCommitStatus(context, pr.data, "success"),
@@ -737,6 +801,9 @@ const probot = (app: Application) => {
       }
 
       case commandMatches(context, "qa"): {
+        if (pr.data.state !== "open") {
+          return prIsNotOpen(context);
+        }
         await Promise.all([
           reactToComment(context, "eyes"),
           setCommitStatus(context, pr.data, "pending"),
@@ -746,6 +813,9 @@ const probot = (app: Application) => {
       }
 
       case commandMatches(context, "failed-qa"): {
+        if (pr.data.state !== "open") {
+          return prIsNotOpen(context);
+        }
         await reactToComment(context, "eyes");
         if (
           await pullRequestHasBeenDeployed(
@@ -762,6 +832,9 @@ const probot = (app: Application) => {
       }
 
       case commandMatches(context, "passed-qa"): {
+        if (pr.data.state !== "open") {
+          return prIsNotOpen(context);
+        }
         await reactToComment(context, "eyes");
         if (
           await pullRequestHasBeenDeployed(
@@ -798,6 +871,14 @@ const probot = (app: Application) => {
             providedEnvironment,
             providedVersion
           ),
+        ]);
+        break;
+      }
+
+      case commandMatches(context, "rollback"): {
+        await Promise.all([
+          reactToComment(context, "eyes"),
+          handleRollbackCommand(context, pr.data),
         ]);
         break;
       }

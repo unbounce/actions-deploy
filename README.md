@@ -34,7 +34,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     # Should be inverse of `if` below
-    if: "(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify'))))"
+    if: "!(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/rollback'))))"
     steps:
     - uses: unbounce/actions-deploy@master
       if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
@@ -52,7 +52,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     # Should be inverse of `if` above
-    if: "(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify'))))"
+    if: "(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/rollback'))))"
     steps:
     - uses: actions/checkout@master
       if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
@@ -112,6 +112,7 @@ Release and deployment automation is driven by commenting on the pull request.
 |`/failed-qa`|Set "QA" status check to "failed"|
 |`/verify`, `/verify <environment>`|(Re-)run `verify` command against an environment (environment defatuls to pre-production environment)|
 |`/deploy`, `/deploy <environment>`, `/deploy <environment> <version>`|(Re-)deploy a release to an environment and run `verify` command - `/qa` must have already been run on the pull request (environment defaults to pre-production environment, version defaults to latest release for the pull request)|
+|`/rollback`|If a pull request is the latest to be deployed to the production environment, this command will roll back the production environment to the previous version|
 
 ### Configuration
 
