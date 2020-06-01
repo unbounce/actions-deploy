@@ -26791,6 +26791,7 @@ const handleRollbackCommand = async (context, pr) => {
 const commentPullRequestNotDeployed = async (context) => {
     return comment_1.Comment.create(context, context.issue().number, `This pull request has not been deployed yet. You can use ${comment_1.code("/qa")} to deploy it to ${comment_1.code(config_1.config.preProductionEnvironment)} or ${comment_1.code("/skip-qa")} to not deploy this pull request.`);
 };
+const prIsNotOpen = (context) => log.debug(`Pull request associated with comment ${JSON.stringify(context.issue())} is not open - quitting`);
 const probot = (app) => {
     // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
     // https://help.github.com/en/actions/reference/events-that-trigger-workflows
@@ -26810,11 +26811,7 @@ const probot = (app) => {
     app.on(["issue_comment.created", "pull_request.opened"], async (context) => {
         const pr = await context.github.pulls.get(context.issue());
         if (!pr) {
-            log.debug(`No pull request associated with comment ${context.issue()} - quitting`);
-            return;
-        }
-        if (pr.data.state !== "open") {
-            log.debug(`Pull request associated with comment ${context.issue()} is not open - quitting`);
+            log.debug(`No pull request associated with comment ${JSON.stringify(context.issue())} - quitting`);
             return;
         }
         const labels = pr.data.labels.map((l) => l.name);
@@ -26824,6 +26821,9 @@ const probot = (app) => {
         }
         switch (true) {
             case utils_1.commandMatches(context, "skip-qa"): {
+                if (pr.data.state !== "open") {
+                    return prIsNotOpen(context);
+                }
                 await Promise.all([
                     utils_1.reactToComment(context, "eyes"),
                     utils_1.setCommitStatus(context, pr.data, "success"),
@@ -26831,6 +26831,9 @@ const probot = (app) => {
                 break;
             }
             case utils_1.commandMatches(context, "qa"): {
+                if (pr.data.state !== "open") {
+                    return prIsNotOpen(context);
+                }
                 await Promise.all([
                     utils_1.reactToComment(context, "eyes"),
                     utils_1.setCommitStatus(context, pr.data, "pending"),
@@ -26839,6 +26842,9 @@ const probot = (app) => {
                 break;
             }
             case utils_1.commandMatches(context, "failed-qa"): {
+                if (pr.data.state !== "open") {
+                    return prIsNotOpen(context);
+                }
                 await utils_1.reactToComment(context, "eyes");
                 if (await utils_1.pullRequestHasBeenDeployed(context, config_1.config.preProductionEnvironment, pr.data.number)) {
                     await utils_1.setCommitStatus(context, pr.data, "failure");
@@ -26849,6 +26855,9 @@ const probot = (app) => {
                 break;
             }
             case utils_1.commandMatches(context, "passed-qa"): {
+                if (pr.data.state !== "open") {
+                    return prIsNotOpen(context);
+                }
                 await utils_1.reactToComment(context, "eyes");
                 if (await utils_1.pullRequestHasBeenDeployed(context, config_1.config.preProductionEnvironment, pr.data.number)) {
                     await utils_1.setCommitStatus(context, pr.data, "success");
@@ -29934,7 +29943,7 @@ const prettyStringify = (thing) => {
     }
     return String(thing);
 };
-const stringifyArgs = (...args) => args.map(prettyStringify).join("\n");
+const stringifyArgs = (args) => args.map(prettyStringify).join("\n");
 exports.warning = (...args) => console.log(`::warning ${stringifyArgs(args)}`);
 exports.error = (...args) => console.log(`::error ${stringifyArgs(args)}`);
 exports.debug = (...args) => console.log(`::debug ${stringifyArgs(args)}`);

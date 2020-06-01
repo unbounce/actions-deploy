@@ -717,6 +717,12 @@ const commentPullRequestNotDeployed = async (context: Context) => {
     )} to not deploy this pull request.`
   );
 };
+const prIsNotOpen = (context: Context) =>
+  log.debug(
+    `Pull request associated with comment ${JSON.stringify(
+      context.issue()
+    )} is not open - quitting`
+  );
 
 const probot = (app: Application) => {
   // Additional app.on events will need to be added to the `on` section of the example workflow in README.md
@@ -748,14 +754,9 @@ const probot = (app: Application) => {
 
     if (!pr) {
       log.debug(
-        `No pull request associated with comment ${context.issue()} - quitting`
-      );
-      return;
-    }
-
-    if (pr.data.state !== "open") {
-      log.debug(
-        `Pull request associated with comment ${context.issue()} is not open - quitting`
+        `No pull request associated with comment ${JSON.stringify(
+          context.issue()
+        )} - quitting`
       );
       return;
     }
@@ -770,6 +771,9 @@ const probot = (app: Application) => {
 
     switch (true) {
       case commandMatches(context, "skip-qa"): {
+        if (pr.data.state !== "open") {
+          return prIsNotOpen(context);
+        }
         await Promise.all([
           reactToComment(context, "eyes"),
           setCommitStatus(context, pr.data, "success"),
@@ -778,6 +782,9 @@ const probot = (app: Application) => {
       }
 
       case commandMatches(context, "qa"): {
+        if (pr.data.state !== "open") {
+          return prIsNotOpen(context);
+        }
         await Promise.all([
           reactToComment(context, "eyes"),
           setCommitStatus(context, pr.data, "pending"),
@@ -787,6 +794,9 @@ const probot = (app: Application) => {
       }
 
       case commandMatches(context, "failed-qa"): {
+        if (pr.data.state !== "open") {
+          return prIsNotOpen(context);
+        }
         await reactToComment(context, "eyes");
         if (
           await pullRequestHasBeenDeployed(
@@ -803,6 +813,9 @@ const probot = (app: Application) => {
       }
 
       case commandMatches(context, "passed-qa"): {
+        if (pr.data.state !== "open") {
+          return prIsNotOpen(context);
+        }
         await reactToComment(context, "eyes");
         if (
           await pullRequestHasBeenDeployed(
