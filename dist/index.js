@@ -26421,6 +26421,9 @@ const createDeploymentAndSetStatus = async (context, version, environment, paylo
     }
 };
 const setup = async (comment) => {
+    if (config_1.config.workingDirectory) {
+        process.chdir(config_1.config.workingDirectory);
+    }
     try {
         await shell_1.shell([
             "echo ::group::Setup",
@@ -59038,6 +59041,7 @@ exports.config = {
     releaseCommand: input("release"),
     verifyCommand: input("verify"),
     setupCommand: input("setup"),
+    workingDirectory: input("working-directory"),
 };
 
 

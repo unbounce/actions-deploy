@@ -67,6 +67,10 @@ const createDeploymentAndSetStatus = async (
 };
 
 const setup = async (comment: Comment) => {
+  if (config.workingDirectory) {
+    process.chdir(config.workingDirectory);
+  }
+
   try {
     await shell([
       "echo ::group::Setup",

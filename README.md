@@ -125,3 +125,4 @@ This action can be configured via the `with` section with the following configur
 |`verify`|No||Command to run to verify a deployment. Environment variables `ENVIRONMENT` and `VERSION` will be available.|
 |`production-environment`|No|`production`||
 |`pre-production-environment`|No|`integration`||
+|`working-directory`|No|Root of repository|Directory to change into before running any commands, relative to root of repository root|
