@@ -12,12 +12,12 @@ on:
     types: [opened, reopened, closed, synchronize]
     # Scope to certain paths if more than one component in a repository uses the actions-deploy workflow
     # paths:
-    #   - packages/my-component/*
+    #   - packages/my-component/**/*
   push:
     branches: [master]
     # Scope to certain paths if more than one component in a repository uses the actions-deploy workflow
     # paths:
-    #   - packages/my-component/*
+    #   - packages/my-component/**/*
   issue_comment: {}
 
 # Provide a name if more than one component in a repository use the actions-deploy workflow:
@@ -79,22 +79,33 @@ environment variable). Specifying a name will create a separate GitHub
 Deployment environment to track deployments for that component. For example, a
 name of `infrastructure` will be tracked as `production[infrastructure]`.
 
-The workflow should be scoped to paths that are relevant for the component.
+The workflow should be scoped to [paths](https://help.github.com/en/actions/reference/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet) that are relevant for the component.
 
 ```yaml
 on:
   pull_request:
     types: [opened, reopened, closed, synchronize]
     paths:
-      - packages/my-component/*
+      - packages/my-component/**/*
   push:
     branches: [master]
     paths:
-      - packages/my-component/*
+      - packages/my-component/**/*
   issue_comment: {}
 
 env:
   ACTIONS_DEPLOY_NAME: infrastructure
+
+```
+
+You will likely want to have the `release`, `deploy`, and `verify` commands run
+within a subdirectory of the repository - you can configure that with
+`working-directory`:
+
+```
+    - uses: unbounce/actions-deploy@master
+      with:
+        working-directory: ./packages/my-component
 ```
 
 **Note** that you may choose to omit the `ACTIONS_DEPLOY_NAME` for the main
