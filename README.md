@@ -18,7 +18,8 @@ on:
     # Scope to certain paths if more than one component in a repository uses the actions-deploy workflow
     # paths:
     #   - packages/my-component/**/*
-  issue_comment: {}
+  issue_comment:
+    types: [created]
 
 # Provide a name if more than one component in a repository use the actions-deploy workflow:
 # env:
