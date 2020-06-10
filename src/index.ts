@@ -25,7 +25,7 @@ import {
   setDeploymentStatus,
 } from "./utils";
 import * as log from "./logging";
-import { shell } from "./shell";
+import { shell, shellOutput } from "./shell";
 import {
   getShortSha,
   checkout,
@@ -725,6 +725,22 @@ const handleRollbackCommand = async (context: Context, pr: PullRequest) => {
   await rollback(context, comment, pr, previousDeployment);
 };
 
+const handleHelpCommand = async (context: Context) => {
+  return Comment.create(context, context.issue().number, [
+    `Hello from ${link(
+      "actions-deploy",
+      "https://github.com/unbounce/actions-deploy"
+    )} :wave:`,
+    await shellOutput(
+      `sed -n '/### Commands/,/### / p' ${__dirname}/../README.md | sed '$ d'`
+    ),
+    link(
+      "Documentation",
+      "https://github.com/unbounce/actions-deploy/blob/master/docs/workflows.md"
+    ),
+  ]);
+};
+
 const commentPullRequestNotDeployed = async (context: Context) => {
   return Comment.create(
     context,
@@ -736,6 +752,7 @@ const commentPullRequestNotDeployed = async (context: Context) => {
     )} to not deploy this pull request.`
   );
 };
+
 const prIsNotOpen = (context: Context) =>
   log.debug(
     `Pull request associated with comment ${JSON.stringify(
@@ -879,6 +896,14 @@ const probot = (app: Application) => {
         await Promise.all([
           reactToComment(context, "eyes"),
           handleRollbackCommand(context, pr.data),
+        ]);
+        break;
+      }
+
+      case commandMatches(context, "help"): {
+        await Promise.all([
+          reactToComment(context, "eyes"),
+          handleHelpCommand(context),
         ]);
         break;
       }

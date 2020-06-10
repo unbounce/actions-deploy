@@ -2,6 +2,14 @@
 
 GitHub Actions-based Release and Deployment.
 
+- release and deployment is driven from the pull request and a pull request is the deployable unit
+  - each release is tied to a pull request
+  - a [roll back involves re-deploying a previous pull request](./docs/workflows.md#rollback-production-deploy)
+- the exact same release that is verified in the pre-production environment is deployed to the production environment
+- pull requests move through the pre-production environment and to production one at a time in a continuous deployment style
+- existing tools are used to perform release, deployment, and verification
+  – this workflow simply adds a way to orchestrate this process
+
 ## Usage
 
 Create a workflow in your repository (such as `.github/workflows/deployment.yaml`):
@@ -71,6 +79,10 @@ environment. Then `/passed-qa` or `/failed-qa` should be commented once manual
 verification of the release is complete. Merging the pull request after
 commenting `/qa` will deploy the release to the production environment.
 
+⚠️ It is recommended that the "QA" status check is required in [branch protection](https://help.github.com/en/github/administering-a-repository/about-protected-branches) for the main branch of the reposiory.
+
+ℹ️See also [docs/workflows.md](./docs/workflows.md).
+
 ### Multiple Components
 
 Monorepos or repositories that have more than one component must specify a
@@ -110,9 +122,10 @@ Release and deployment automation is driven by commenting on the pull request.
 |`/qa`|Create a release, deploy it to the pre-production environment and run `verify` command|
 |`/passed-qa`|Set "QA" status check to "success"|
 |`/failed-qa`|Set "QA" status check to "failed"|
-|`/verify`, `/verify <environment>`|(Re-)run `verify` command against an environment (environment defatuls to pre-production environment)|
-|`/deploy`, `/deploy <environment>`, `/deploy <environment> <version>`|(Re-)deploy a release to an environment and run `verify` command - `/qa` must have already been run on the pull request (environment defaults to pre-production environment, version defaults to latest release for the pull request)|
+|`/verify` or <br/>`/verify <environment>`|(Re-)run `verify` command against an environment (environment defatuls to pre-production environment)|
+|`/deploy` or <br/>`/deploy <environment>` or <br/>`/deploy <environment> <version>`|(Re-)deploy a release to an environment and run `verify` command - `/qa` must have already been run on the pull request (environment defaults to pre-production environment, version defaults to latest release for the pull request)|
 |`/rollback`|If a pull request is the latest to be deployed to the production environment, this command will roll back the production environment to the previous version|
+|`/help`|Show help message|
 
 ### Configuration
 

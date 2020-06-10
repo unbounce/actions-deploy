@@ -26807,6 +26807,13 @@ const handleRollbackCommand = async (context, pr) => {
     await setup(comment);
     await rollback(context, comment, pr, previousDeployment);
 };
+const handleHelpCommand = async (context) => {
+    return comment_1.Comment.create(context, context.issue().number, [
+        `Hello from ${comment_1.link("actions-deploy", "https://github.com/unbounce/actions-deploy")} :wave:`,
+        await shell_1.shellOutput(`sed -n '/### Commands/,/### / p' ${__dirname}/../README.md | sed '$ d'`),
+        comment_1.link("Documentation", "https://github.com/unbounce/actions-deploy/blob/master/docs/workflows.md"),
+    ]);
+};
 const commentPullRequestNotDeployed = async (context) => {
     return comment_1.Comment.create(context, context.issue().number, `This pull request has not been deployed yet. You can use ${comment_1.code("/qa")} to deploy it to ${comment_1.code(config_1.config.preProductionEnvironment)} or ${comment_1.code("/skip-qa")} to not deploy this pull request.`);
 };
@@ -26906,6 +26913,13 @@ const probot = (app) => {
                 await Promise.all([
                     utils_1.reactToComment(context, "eyes"),
                     handleRollbackCommand(context, pr.data),
+                ]);
+                break;
+            }
+            case utils_1.commandMatches(context, "help"): {
+                await Promise.all([
+                    utils_1.reactToComment(context, "eyes"),
+                    handleHelpCommand(context),
                 ]);
                 break;
             }
