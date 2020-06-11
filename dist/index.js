@@ -1739,10 +1739,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const parsimmon_1 = __importDefault(__webpack_require__(270));
 const config_1 = __webpack_require__(641);
-exports.warning = (text) => `:warning: ${text}`;
-exports.error = (text) => `:x: ${text}`;
-exports.success = (text) => `:white_check_mark: ${text}`;
-exports.info = (text) => `:information_source: ${text}`;
+exports.warning = (text) => `:warning:  ${text}`;
+exports.error = (text) => `:x:  ${text}`;
+exports.success = (text) => `:white_check_mark:  ${text}`;
+exports.info = (text) => `:information_source:  ${text}`;
+exports.pending = (text) => `:hourglass_flowing_sand:  ${text}`;
 exports.details = (summary, body) => {
     return `<details>\n<summary>${summary}</summary>\n\n${body}\n\n</details>`;
 };
@@ -26443,7 +26444,7 @@ const setup = async (comment) => {
 const release = async (comment, version) => {
     try {
         comment.separator();
-        await comment.append(`Releasing ${utils_1.maybeComponentName()}${version}...`);
+        await comment.ephemeral(comment_1.pending(`Releasing ${utils_1.maybeComponentName()}${version}...`));
         const env = {
             VERSION: version,
         };
@@ -26454,8 +26455,8 @@ const release = async (comment, version) => {
         ];
         const output = await shell_1.shell(commands, env);
         await comment.append([
-            comment_1.logToDetails(output),
             comment_1.success(`${utils_1.maybeComponentName()}${version} was successfully released.`),
+            comment_1.logToDetails(output),
         ]);
     }
     catch (e) {
@@ -26466,7 +26467,7 @@ const release = async (comment, version) => {
 const deploy = async (comment, version, environment) => {
     try {
         comment.separator();
-        await comment.append(`Deploying ${utils_1.maybeComponentName()}${version} to ${comment_1.code(environment)}...`);
+        await comment.ephemeral(comment_1.pending(`Deploying ${utils_1.maybeComponentName()}${version} to ${comment_1.code(environment)}...`));
         const env = {
             VERSION: version,
             ENVIRONMENT: environment,
@@ -26478,8 +26479,8 @@ const deploy = async (comment, version, environment) => {
         ];
         const output = await shell_1.shell(commands, env);
         await comment.append([
-            comment_1.logToDetails(output),
             comment_1.success(`${utils_1.maybeComponentName()}${version} was successfully deployed to ${comment_1.code(environment)}.`),
+            comment_1.logToDetails(output),
         ]);
     }
     catch (e) {
@@ -26490,7 +26491,7 @@ const deploy = async (comment, version, environment) => {
 const verify = async (comment, version, environment) => {
     try {
         comment.separator();
-        await comment.append(`Verifying ${utils_1.maybeComponentName()}${version} in ${comment_1.code(environment)}...`);
+        await comment.ephemeral(comment_1.pending(`Verifying ${utils_1.maybeComponentName()}${version} in ${comment_1.code(environment)}...`));
         const env = {
             VERSION: version,
             ENVIRONMENT: environment,
@@ -26502,8 +26503,8 @@ const verify = async (comment, version, environment) => {
         ];
         const output = await shell_1.shell(commands, env);
         await comment.append([
-            comment_1.logToDetails(output),
             comment_1.success(`${utils_1.maybeComponentName()}${version} was successfully verified in ${comment_1.code(environment)}.`),
+            comment_1.logToDetails(output),
         ]);
     }
     catch (e) {
@@ -26558,7 +26559,7 @@ const handlePrMerged = async (context, pr) => {
         await comment.append(comment_1.error(comment_1.mention(`The ${utils_1.maybeComponentName()}${comment_1.code(preProductionEnvironment)} deployment resulted in ${comment_1.code(deploymentStatus || "unknown")} - not deploying to ${comment_1.code(productionEnvironment)}.`)));
         return;
     }
-    await comment.append(comment_1.mention(`Deploying to ${comment_1.code(productionEnvironment)}...`));
+    await comment.ephemeral(comment_1.pending(comment_1.mention(`Deploying to ${comment_1.code(productionEnvironment)}...`)));
     await setup(comment);
     const version = deployment.ref;
     const environment = productionEnvironment;

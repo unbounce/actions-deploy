@@ -43,6 +43,7 @@ import {
   success,
   warning,
   deploymentsLink,
+  pending,
 } from "./comment";
 
 import { Deployment, PullRequest } from "./types";
@@ -87,7 +88,9 @@ const setup = async (comment: Comment) => {
 const release = async (comment: Comment, version: string) => {
   try {
     comment.separator();
-    await comment.append(`Releasing ${maybeComponentName()}${version}...`);
+    await comment.ephemeral(
+      pending(`Releasing ${maybeComponentName()}${version}...`)
+    );
     const env = {
       VERSION: version,
     };
@@ -98,8 +101,8 @@ const release = async (comment: Comment, version: string) => {
     ];
     const output = await shell(commands, env);
     await comment.append([
-      logToDetails(output),
       success(`${maybeComponentName()}${version} was successfully released.`),
+      logToDetails(output),
     ]);
   } catch (e) {
     await handleError(
@@ -118,8 +121,10 @@ const deploy = async (
 ) => {
   try {
     comment.separator();
-    await comment.append(
-      `Deploying ${maybeComponentName()}${version} to ${code(environment)}...`
+    await comment.ephemeral(
+      pending(
+        `Deploying ${maybeComponentName()}${version} to ${code(environment)}...`
+      )
     );
     const env = {
       VERSION: version,
@@ -132,12 +137,12 @@ const deploy = async (
     ];
     const output = await shell(commands, env);
     await comment.append([
-      logToDetails(output),
       success(
         `${maybeComponentName()}${version} was successfully deployed to ${code(
           environment
         )}.`
       ),
+      logToDetails(output),
     ]);
   } catch (e) {
     await handleError(
@@ -158,8 +163,10 @@ const verify = async (
 ) => {
   try {
     comment.separator();
-    await comment.append(
-      `Verifying ${maybeComponentName()}${version} in ${code(environment)}...`
+    await comment.ephemeral(
+      pending(
+        `Verifying ${maybeComponentName()}${version} in ${code(environment)}...`
+      )
     );
     const env = {
       VERSION: version,
@@ -172,12 +179,12 @@ const verify = async (
     ];
     const output = await shell(commands, env);
     await comment.append([
-      logToDetails(output),
       success(
         `${maybeComponentName()}${version} was successfully verified in ${code(
           environment
         )}.`
       ),
+      logToDetails(output),
     ]);
   } catch (e) {
     await handleError(
@@ -289,8 +296,8 @@ const handlePrMerged = async (
     return;
   }
 
-  await comment.append(
-    mention(`Deploying to ${code(productionEnvironment)}...`)
+  await comment.ephemeral(
+    pending(mention(`Deploying to ${code(productionEnvironment)}...`))
   );
 
   await setup(comment);
