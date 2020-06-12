@@ -17,4 +17,5 @@ export const config = {
   releaseCommand: input("release"),
   verifyCommand: input("verify"),
   setupCommand: input("setup"),
+  workingDirectory: input("working-directory"),
 };

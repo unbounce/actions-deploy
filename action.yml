@@ -24,6 +24,10 @@ inputs:
     description: Name of the pre-production environment
     required: false
     default: integration
+  working-directory:
+    description: Directory to change into before running any commands, relative to root of repository root
+    required: false
+    default: ''
 runs:
   using: node12
   main: dist/index.js

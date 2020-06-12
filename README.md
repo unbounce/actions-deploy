@@ -20,13 +20,14 @@ on:
     types: [opened, reopened, closed, synchronize]
     # Scope to certain paths if more than one component in a repository uses the actions-deploy workflow
     # paths:
-    #   - packages/my-component/*
+    #   - packages/my-component/**/*
   push:
     branches: [master]
     # Scope to certain paths if more than one component in a repository uses the actions-deploy workflow
     # paths:
-    #   - packages/my-component/*
-  issue_comment: {}
+    #   - packages/my-component/**/*
+  issue_comment:
+    types: [created]
 
 # Provide a name if more than one component in a repository use the actions-deploy workflow:
 # env:
@@ -42,7 +43,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     # Should be inverse of `if` below
-    if: "!(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/rollback'))))"
+    if: "(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/rollback'))))"
     steps:
     - uses: unbounce/actions-deploy@master
       if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
@@ -60,7 +61,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     # Should be inverse of `if` above
-    if: "(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/rollback'))))"
+    if: "!(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/rollback'))))"
     steps:
     - uses: actions/checkout@master
       if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
@@ -91,22 +92,33 @@ environment variable). Specifying a name will create a separate GitHub
 Deployment environment to track deployments for that component. For example, a
 name of `infrastructure` will be tracked as `production[infrastructure]`.
 
-The workflow should be scoped to paths that are relevant for the component.
+The workflow should be scoped to [paths](https://help.github.com/en/actions/reference/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet) that are relevant for the component.
 
 ```yaml
 on:
   pull_request:
     types: [opened, reopened, closed, synchronize]
     paths:
-      - packages/my-component/*
+      - packages/my-component/**/*
   push:
     branches: [master]
     paths:
-      - packages/my-component/*
+      - packages/my-component/**/*
   issue_comment: {}
 
 env:
   ACTIONS_DEPLOY_NAME: infrastructure
+
+```
+
+You will likely want to have the `release`, `deploy`, and `verify` commands run
+within a subdirectory of the repository - you can configure that with
+`working-directory`:
+
+```
+    - uses: unbounce/actions-deploy@master
+      with:
+        working-directory: ./packages/my-component
 ```
 
 **Note** that you may choose to omit the `ACTIONS_DEPLOY_NAME` for the main
@@ -139,3 +151,4 @@ This action can be configured via the `with` section with the following configur
 |`verify`|No||Command to run to verify a deployment. Environment variables `ENVIRONMENT` and `VERSION` will be available.|
 |`production-environment`|No|`production`||
 |`pre-production-environment`|No|`integration`||
+|`working-directory`|No|Root of repository|Directory to change into before running any commands, relative to root of repository root|
