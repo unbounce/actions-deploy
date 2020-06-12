@@ -34,6 +34,11 @@ export const runLink = (text: string) => {
   return link(text, url);
 };
 
+export const deploymentsLink = (text: string) => {
+  const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/deployments`;
+  return link(text, url);
+};
+
 export const link = (text: string, url: string) => {
   return `[${text}](${url})`;
 };

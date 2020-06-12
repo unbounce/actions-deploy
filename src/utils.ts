@@ -127,7 +127,7 @@ export const findDeployment = async (context: Context, environment: string) => {
   }
 };
 
-export const findPreviousDeployment = async (
+export const findPreviousSuccessfulDeployment = async (
   context: Context,
   environment: string
 ) => {
@@ -147,10 +147,15 @@ export const findPreviousDeployment = async (
     if (latestDeployment.id < previousDeployment.id) {
       throw new Error("GitHub deployments were not returned in reverse order");
     }
-    return previousDeployment;
-  } else {
-    return undefined;
+
+    // Remove latest deployment
+    const [, ...rest] = deployments.data;
+    return rest.find(
+      async (deployment) =>
+        (await getDeploymentStatus(context, deployment.id)) === "success"
+    );
   }
+  return undefined;
 };
 
 export const findLastDeploymentForPullRequest = async (
