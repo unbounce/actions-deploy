@@ -1771,6 +1771,9 @@ exports.deploymentsLink = (text) => {
 exports.link = (text, url) => {
     return `[${text}](${url})`;
 };
+exports.withoutGroups = (text) => {
+    return text.replace(/::group::(\w+)?\n/g, "").replace(/::endgroup::\n/g, "");
+};
 const createLogToDetailsParser = () => {
     const startRe = /::group::(\w+)?/;
     const startGroup = parsimmon_1.default.regex(startRe, 1);
@@ -1839,6 +1842,10 @@ class Comment {
         return comment;
     }
     async append(lines) {
+        if (this.subscription) {
+            clearInterval(this.subscription);
+            this.subscription = undefined;
+        }
         this.lines = this.lines.concat(lines);
         await this.apply(this.lines);
     }
@@ -1847,6 +1854,18 @@ class Comment {
     }
     separator() {
         this.lines.push("---");
+    }
+    // Subscribe to updates to an array and ephemerally append it's contents to
+    // the commend as it changes. The subscription will stop the next time
+    // `append` is called.
+    subscribeTo(buffer, format = (b) => b, interval = 5000) {
+        let lastSize;
+        this.subscription = setInterval(async () => {
+            if (buffer.length !== lastSize) {
+                await this.ephemeral(format(buffer));
+                lastSize = buffer.length;
+            }
+        }, interval);
     }
     apply(lines) {
         if (typeof this.id === "undefined") {
@@ -26444,7 +26463,8 @@ const setup = async (comment) => {
 const release = async (comment, version) => {
     try {
         comment.separator();
-        await comment.ephemeral(comment_1.pending(`Releasing ${utils_1.maybeComponentName()}${version}...`));
+        const beforeMessage = comment_1.pending(`Releasing ${utils_1.maybeComponentName()}${version}...`);
+        await comment.ephemeral(beforeMessage);
         const env = {
             VERSION: version,
         };
@@ -26453,7 +26473,11 @@ const release = async (comment, version) => {
             config_1.config.releaseCommand,
             "echo ::endgroup::",
         ];
-        const output = await shell_1.shell(commands, env);
+        const [promise, subscription] = shell_1.shellWithOutput(commands, env);
+        comment.subscribeTo(subscription, (lines) => {
+            return [beforeMessage, comment_1.codeBlock(comment_1.withoutGroups(lines.join("\n")))];
+        });
+        const output = await promise;
         await comment.append([
             comment_1.success(`${utils_1.maybeComponentName()}${version} was successfully released.`),
             comment_1.logToDetails(output),
@@ -26467,7 +26491,8 @@ const release = async (comment, version) => {
 const deploy = async (comment, version, environment) => {
     try {
         comment.separator();
-        await comment.ephemeral(comment_1.pending(`Deploying ${utils_1.maybeComponentName()}${version} to ${comment_1.code(environment)}...`));
+        const beforeMessage = comment_1.pending(`Deploying ${utils_1.maybeComponentName()}${version} to ${comment_1.code(environment)}...`);
+        await comment.ephemeral(beforeMessage);
         const env = {
             VERSION: version,
             ENVIRONMENT: environment,
@@ -26477,7 +26502,11 @@ const deploy = async (comment, version, environment) => {
             config_1.config.deployCommand,
             "echo ::endgroup::",
         ];
-        const output = await shell_1.shell(commands, env);
+        const [promise, subscription] = shell_1.shellWithOutput(commands, env);
+        comment.subscribeTo(subscription, (lines) => {
+            return [beforeMessage, comment_1.codeBlock(comment_1.withoutGroups(lines.join("\n")))];
+        });
+        const output = await promise;
         await comment.append([
             comment_1.success(`${utils_1.maybeComponentName()}${version} was successfully deployed to ${comment_1.code(environment)}.`),
             comment_1.logToDetails(output),
@@ -26491,7 +26520,8 @@ const deploy = async (comment, version, environment) => {
 const verify = async (comment, version, environment) => {
     try {
         comment.separator();
-        await comment.ephemeral(comment_1.pending(`Verifying ${utils_1.maybeComponentName()}${version} in ${comment_1.code(environment)}...`));
+        const beforeMessage = comment_1.pending(`Verifying ${utils_1.maybeComponentName()}${version} in ${comment_1.code(environment)}...`);
+        await comment.ephemeral(beforeMessage);
         const env = {
             VERSION: version,
             ENVIRONMENT: environment,
@@ -26501,7 +26531,11 @@ const verify = async (comment, version, environment) => {
             config_1.config.verifyCommand,
             "echo ::endgroup::",
         ];
-        const output = await shell_1.shell(commands, env);
+        const [promise, subscription] = shell_1.shellWithOutput(commands, env);
+        comment.subscribeTo(subscription, (lines) => {
+            return [beforeMessage, comment_1.codeBlock(comment_1.withoutGroups(lines.join("\n")))];
+        });
+        const output = await promise;
         await comment.append([
             comment_1.success(`${utils_1.maybeComponentName()}${version} was successfully verified in ${comment_1.code(environment)}.`),
             comment_1.logToDetails(output),
@@ -82139,9 +82173,12 @@ class ShellError extends Error {
     }
 }
 exports.ShellError = ShellError;
-exports.shell = async (commands, extraEnv = {}) => {
+exports.shell = (commands, extraEnv = {}) => {
+    return exports.shellWithOutput(commands, extraEnv)[0];
+};
+exports.shellWithOutput = (commands, extraEnv = {}) => {
     const output = [];
-    return new Promise((resolve, reject) => {
+    const promise = new Promise((resolve, reject) => {
         const env = Object.assign(Object.assign({}, process.env), extraEnv);
         const options = { env, cwd: process.cwd() };
         const commandsWithTracing = commands.reduce((acc, command) => {
@@ -82175,6 +82212,7 @@ exports.shell = async (commands, extraEnv = {}) => {
             }
         });
     });
+    return [promise, output];
 };
 exports.shellOutput = (command) => {
     return new Promise((resolve, reject) => {

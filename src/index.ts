@@ -25,7 +25,7 @@ import {
   setDeploymentStatus,
 } from "./utils";
 import * as log from "./logging";
-import { shell, shellOutput } from "./shell";
+import { shell, shellOutput, shellWithOutput } from "./shell";
 import {
   getShortSha,
   checkout,
@@ -35,6 +35,7 @@ import {
 import {
   Comment,
   code,
+  codeBlock,
   error,
   info,
   logToDetails,
@@ -44,6 +45,7 @@ import {
   warning,
   deploymentsLink,
   pending,
+  withoutGroups,
 } from "./comment";
 
 import { Deployment, PullRequest } from "./types";
@@ -88,9 +90,10 @@ const setup = async (comment: Comment) => {
 const release = async (comment: Comment, version: string) => {
   try {
     comment.separator();
-    await comment.ephemeral(
-      pending(`Releasing ${maybeComponentName()}${version}...`)
+    const beforeMessage = pending(
+      `Releasing ${maybeComponentName()}${version}...`
     );
+    await comment.ephemeral(beforeMessage);
     const env = {
       VERSION: version,
     };
@@ -99,7 +102,11 @@ const release = async (comment: Comment, version: string) => {
       config.releaseCommand,
       "echo ::endgroup::",
     ];
-    const output = await shell(commands, env);
+    const [promise, subscription] = shellWithOutput(commands, env);
+    comment.subscribeTo(subscription, (lines) => {
+      return [beforeMessage, codeBlock(withoutGroups(lines.join("\n")))];
+    });
+    const output = await promise;
     await comment.append([
       success(`${maybeComponentName()}${version} was successfully released.`),
       logToDetails(output),
@@ -121,11 +128,10 @@ const deploy = async (
 ) => {
   try {
     comment.separator();
-    await comment.ephemeral(
-      pending(
-        `Deploying ${maybeComponentName()}${version} to ${code(environment)}...`
-      )
+    const beforeMessage = pending(
+      `Deploying ${maybeComponentName()}${version} to ${code(environment)}...`
     );
+    await comment.ephemeral(beforeMessage);
     const env = {
       VERSION: version,
       ENVIRONMENT: environment,
@@ -135,7 +141,11 @@ const deploy = async (
       config.deployCommand,
       "echo ::endgroup::",
     ];
-    const output = await shell(commands, env);
+    const [promise, subscription] = shellWithOutput(commands, env);
+    comment.subscribeTo(subscription, (lines) => {
+      return [beforeMessage, codeBlock(withoutGroups(lines.join("\n")))];
+    });
+    const output = await promise;
     await comment.append([
       success(
         `${maybeComponentName()}${version} was successfully deployed to ${code(
@@ -163,11 +173,10 @@ const verify = async (
 ) => {
   try {
     comment.separator();
-    await comment.ephemeral(
-      pending(
-        `Verifying ${maybeComponentName()}${version} in ${code(environment)}...`
-      )
+    const beforeMessage = pending(
+      `Verifying ${maybeComponentName()}${version} in ${code(environment)}...`
     );
+    await comment.ephemeral(beforeMessage);
     const env = {
       VERSION: version,
       ENVIRONMENT: environment,
@@ -177,7 +186,11 @@ const verify = async (
       config.verifyCommand,
       "echo ::endgroup::",
     ];
-    const output = await shell(commands, env);
+    const [promise, subscription] = shellWithOutput(commands, env);
+    comment.subscribeTo(subscription, (lines) => {
+      return [beforeMessage, codeBlock(withoutGroups(lines.join("\n")))];
+    });
+    const output = await promise;
     await comment.append([
       success(
         `${maybeComponentName()}${version} was successfully verified in ${code(

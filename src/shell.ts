@@ -6,12 +6,19 @@ export class ShellError extends Error {
   }
 }
 
-export const shell = async (
+export const shell = (
   commands: string[],
   extraEnv: Record<string, string> = {}
 ): Promise<string> => {
+  return shellWithOutput(commands, extraEnv)[0];
+};
+
+export const shellWithOutput = (
+  commands: string[],
+  extraEnv: Record<string, string> = {}
+): [Promise<string>, string[]] => {
   const output: string[] = [];
-  return new Promise((resolve, reject) => {
+  const promise: Promise<string> = new Promise((resolve, reject) => {
     const env = {
       ...process.env,
       ...extraEnv,
@@ -53,6 +60,7 @@ export const shell = async (
       }
     });
   });
+  return [promise, output];
 };
 
 export const shellOutput = (command: string): Promise<string> => {
