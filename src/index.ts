@@ -25,7 +25,7 @@ import {
   setDeploymentStatus,
 } from "./utils";
 import * as log from "./logging";
-import { shell, shellOutput } from "./shell";
+import { shell, shellOutput, shellWithOutput } from "./shell";
 import {
   getShortSha,
   checkout,
@@ -35,6 +35,7 @@ import {
 import {
   Comment,
   code,
+  codeBlock,
   error,
   info,
   logToDetails,
@@ -43,6 +44,8 @@ import {
   success,
   warning,
   deploymentsLink,
+  pending,
+  withoutGroups,
 } from "./comment";
 
 import { Deployment, PullRequest } from "./types";
@@ -87,7 +90,10 @@ const setup = async (comment: Comment) => {
 const release = async (comment: Comment, version: string) => {
   try {
     comment.separator();
-    await comment.append(`Releasing ${maybeComponentName()}${version}...`);
+    const beforeMessage = pending(
+      `Releasing ${maybeComponentName()}${version}...`
+    );
+    await comment.ephemeral(beforeMessage);
     const env = {
       VERSION: version,
     };
@@ -96,10 +102,14 @@ const release = async (comment: Comment, version: string) => {
       config.releaseCommand,
       "echo ::endgroup::",
     ];
-    const output = await shell(commands, env);
+    const [promise, subscription] = shellWithOutput(commands, env);
+    comment.subscribeTo(subscription, (lines) => {
+      return [beforeMessage, codeBlock(withoutGroups(lines.join("\n")))];
+    });
+    const output = await promise;
     await comment.append([
-      logToDetails(output),
       success(`${maybeComponentName()}${version} was successfully released.`),
+      logToDetails(output),
     ]);
   } catch (e) {
     await handleError(
@@ -118,9 +128,10 @@ const deploy = async (
 ) => {
   try {
     comment.separator();
-    await comment.append(
+    const beforeMessage = pending(
       `Deploying ${maybeComponentName()}${version} to ${code(environment)}...`
     );
+    await comment.ephemeral(beforeMessage);
     const env = {
       VERSION: version,
       ENVIRONMENT: environment,
@@ -130,14 +141,18 @@ const deploy = async (
       config.deployCommand,
       "echo ::endgroup::",
     ];
-    const output = await shell(commands, env);
+    const [promise, subscription] = shellWithOutput(commands, env);
+    comment.subscribeTo(subscription, (lines) => {
+      return [beforeMessage, codeBlock(withoutGroups(lines.join("\n")))];
+    });
+    const output = await promise;
     await comment.append([
-      logToDetails(output),
       success(
         `${maybeComponentName()}${version} was successfully deployed to ${code(
           environment
         )}.`
       ),
+      logToDetails(output),
     ]);
   } catch (e) {
     await handleError(
@@ -158,9 +173,10 @@ const verify = async (
 ) => {
   try {
     comment.separator();
-    await comment.append(
+    const beforeMessage = pending(
       `Verifying ${maybeComponentName()}${version} in ${code(environment)}...`
     );
+    await comment.ephemeral(beforeMessage);
     const env = {
       VERSION: version,
       ENVIRONMENT: environment,
@@ -170,14 +186,18 @@ const verify = async (
       config.verifyCommand,
       "echo ::endgroup::",
     ];
-    const output = await shell(commands, env);
+    const [promise, subscription] = shellWithOutput(commands, env);
+    comment.subscribeTo(subscription, (lines) => {
+      return [beforeMessage, codeBlock(withoutGroups(lines.join("\n")))];
+    });
+    const output = await promise;
     await comment.append([
-      logToDetails(output),
       success(
         `${maybeComponentName()}${version} was successfully verified in ${code(
           environment
         )}.`
       ),
+      logToDetails(output),
     ]);
   } catch (e) {
     await handleError(
@@ -289,8 +309,8 @@ const handlePrMerged = async (
     return;
   }
 
-  await comment.append(
-    mention(`Deploying to ${code(productionEnvironment)}...`)
+  await comment.ephemeral(
+    pending(mention(`Deploying to ${code(productionEnvironment)}...`))
   );
 
   await setup(comment);
@@ -604,11 +624,7 @@ const handleVerifyCommand = async (
 
     await comment.append(success("Done"));
   } catch (e) {
-    await handleError(
-      comment,
-      `verification of ${code(environment)} failed`,
-      e
-    );
+    // Handled in `verify`
   }
 };
 

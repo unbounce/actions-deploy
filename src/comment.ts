@@ -3,10 +3,11 @@ import type { Context } from "probot";
 
 import { config } from "./config";
 
-export const warning = (text: string) => `:warning: ${text}`;
-export const error = (text: string) => `:x: ${text}`;
-export const success = (text: string) => `:white_check_mark: ${text}`;
-export const info = (text: string) => `:information_source: ${text}`;
+export const warning = (text: string) => `:warning:  ${text}`;
+export const error = (text: string) => `:x:  ${text}`;
+export const success = (text: string) => `:white_check_mark:  ${text}`;
+export const info = (text: string) => `:information_source:  ${text}`;
+export const pending = (text: string) => `:hourglass_flowing_sand:  ${text}`;
 
 export const details = (summary: string, body: string) => {
   return `<details>\n<summary>${summary}</summary>\n\n${body}\n\n</details>`;
@@ -41,6 +42,10 @@ export const deploymentsLink = (text: string) => {
 
 export const link = (text: string, url: string) => {
   return `[${text}](${url})`;
+};
+
+export const withoutGroups = (text: string) => {
+  return text.replace(/::group::(\w+)?\n/g, "").replace(/::endgroup::\n/g, "");
 };
 
 const createLogToDetailsParser = () => {
@@ -109,6 +114,7 @@ export class Comment {
   private lines: string[] = [];
   private header: string[] = [];
   private footer: string[];
+  private subscription?: NodeJS.Timeout;
   public url: string = "";
 
   constructor(private context: Context, private issueNumber: number) {
@@ -129,6 +135,10 @@ export class Comment {
   }
 
   async append(lines: string | string[]) {
+    if (this.subscription) {
+      clearInterval(this.subscription);
+      this.subscription = undefined;
+    }
     this.lines = this.lines.concat(lines);
     await this.apply(this.lines);
   }
@@ -139,6 +149,23 @@ export class Comment {
 
   separator() {
     this.lines.push("---");
+  }
+
+  // Subscribe to updates to an array and ephemerally append it's contents to
+  // the commend as it changes. The subscription will stop the next time
+  // `append` is called.
+  subscribeTo(
+    buffer: string[],
+    format: (buffer: string[]) => string | string[] = (b) => b,
+    interval = 5000
+  ) {
+    let lastSize: number | undefined;
+    this.subscription = setInterval(async () => {
+      if (buffer.length !== lastSize) {
+        await this.ephemeral(format(buffer));
+        lastSize = buffer.length;
+      }
+    }, interval);
   }
 
   private apply(lines: string[]) {
