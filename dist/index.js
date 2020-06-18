@@ -26781,7 +26781,7 @@ const handleVerifyCommand = async (context, pr, providedEnvironment) => {
         await comment.append(comment_1.success("Done"));
     }
     catch (e) {
-        await utils_1.handleError(comment, `verification of ${comment_1.code(environment)} failed`, e);
+        // Handled in `verify`
     }
 };
 const handleDeployCommand = async (context, pr, providedEnvironment, providedVersion) => {

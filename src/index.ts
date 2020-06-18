@@ -624,11 +624,7 @@ const handleVerifyCommand = async (
 
     await comment.append(success("Done"));
   } catch (e) {
-    await handleError(
-      comment,
-      `verification of ${code(environment)} failed`,
-      e
-    );
+    // Handled in `verify`
   }
 };
 
