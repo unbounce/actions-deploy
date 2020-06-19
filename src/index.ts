@@ -623,20 +623,16 @@ const handleVerifyCommand = async (
     const version = deployment.ref;
     await verify(comment, version, environment);
 
-    if (environment === config.preProductionEnvironment) {
-      if (deploymentPullRequestNumber(deployment) === pr.number) {
-        await setDeploymentStatus(context, deployment.id, "success");
-      } else {
-        await comment.append(
-          warning(
-            `This pull request is not currently deployed to ${code(
-              environment
-            )}. You can use ${code("/qa")} to deploy it to ${code(
-              environment
-            )}.`
-          )
-        );
-      }
+    if (deploymentPullRequestNumber(deployment) === pr.number) {
+      await setDeploymentStatus(context, deployment.id, "success");
+    } else if (environment === config.preProductionEnvironment) {
+      await comment.append(
+        warning(
+          `This pull request is not currently deployed to ${code(
+            environment
+          )}. You can use ${code("/qa")} to deploy it to ${code(environment)}.`
+        )
+      );
     }
 
     await comment.append(success("Done"));

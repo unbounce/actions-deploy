@@ -26778,13 +26778,11 @@ const handleVerifyCommand = async (context, pr, providedEnvironment) => {
     try {
         const version = deployment.ref;
         await verify(comment, version, environment);
-        if (environment === config_1.config.preProductionEnvironment) {
-            if (utils_1.deploymentPullRequestNumber(deployment) === pr.number) {
-                await utils_1.setDeploymentStatus(context, deployment.id, "success");
-            }
-            else {
-                await comment.append(comment_1.warning(`This pull request is not currently deployed to ${comment_1.code(environment)}. You can use ${comment_1.code("/qa")} to deploy it to ${comment_1.code(environment)}.`));
-            }
+        if (utils_1.deploymentPullRequestNumber(deployment) === pr.number) {
+            await utils_1.setDeploymentStatus(context, deployment.id, "success");
+        }
+        else if (environment === config_1.config.preProductionEnvironment) {
+            await comment.append(comment_1.warning(`This pull request is not currently deployed to ${comment_1.code(environment)}. You can use ${comment_1.code("/qa")} to deploy it to ${comment_1.code(environment)}.`));
         }
         await comment.append(comment_1.success("Done"));
     }
