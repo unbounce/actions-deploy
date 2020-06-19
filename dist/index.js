@@ -26603,12 +26603,20 @@ const handlePrMerged = async (context, pr) => {
             await verify(comment, version, environment);
         }
         catch (e) {
-            const previousDeployment = await utils_1.findPreviousSuccessfulDeployment(context, environment);
-            if (previousDeployment) {
-                await rollback(context, comment, pr, previousDeployment);
+            if (config_1.config.autoRollback) {
+                const previousDeployment = await utils_1.findPreviousSuccessfulDeployment(context, environment);
+                if (previousDeployment) {
+                    await rollback(context, comment, pr, previousDeployment);
+                }
+                else {
+                    await comment.append(comment_1.warning(`Unable to find previous successful deployment for ${utils_1.maybeComponentName()}${comment_1.code(environment)} to roll back to.`));
+                }
             }
             else {
-                await comment.append(comment_1.warning(`Unable to find previous successful deployment for ${utils_1.maybeComponentName()}${comment_1.code(environment)} to roll back to.`));
+                await comment.append([
+                    comment_1.warning(`I would have rolled back to the previous successful ${comment_1.code(environment)} deployment but this workflow was configured to not do so.`),
+                    comment_1.info(`Comment ${comment_1.code("/rollback")} to roll back to the previous successful ${comment_1.code(environment)} deployment.`),
+                ]);
             }
             // Re-throw so that first deployment is marked as "error"
             throw e;
@@ -59146,6 +59154,7 @@ exports.config = {
     verifyCommand: input("verify"),
     setupCommand: input("setup"),
     workingDirectory: input("working-directory"),
+    autoRollback: input("rollback-on-production-deployment-failure") === "true",
 };
 
 

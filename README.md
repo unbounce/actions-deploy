@@ -152,3 +152,4 @@ This action can be configured via the `with` section with the following configur
 |`production-environment`|No|`production`||
 |`pre-production-environment`|No|`integration`||
 |`working-directory`|No|Root of repository|Directory to change into before running any commands, relative to root of repository root|
+|`rollback-on-production-deployment-failure`|No|`'true'`|Automatically roll back to the previous successful production deployment if `deploy` or `verify` commands fail

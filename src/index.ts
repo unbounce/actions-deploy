@@ -326,20 +326,37 @@ const handlePrMerged = async (
         await deploy(comment, version, environment);
         await verify(comment, version, environment);
       } catch (e) {
-        const previousDeployment = await findPreviousSuccessfulDeployment(
-          context,
-          environment
-        );
-        if (previousDeployment) {
-          await rollback(context, comment, pr, previousDeployment);
-        } else {
-          await comment.append(
-            warning(
-              `Unable to find previous successful deployment for ${maybeComponentName()}${code(
-                environment
-              )} to roll back to.`
-            )
+        if (config.autoRollback) {
+          const previousDeployment = await findPreviousSuccessfulDeployment(
+            context,
+            environment
           );
+          if (previousDeployment) {
+            await rollback(context, comment, pr, previousDeployment);
+          } else {
+            await comment.append(
+              warning(
+                `Unable to find previous successful deployment for ${maybeComponentName()}${code(
+                  environment
+                )} to roll back to.`
+              )
+            );
+          }
+        } else {
+          await comment.append([
+            warning(
+              `I would have rolled back to the previous successful ${code(
+                environment
+              )} deployment but this workflow was configured to not do so.`
+            ),
+            info(
+              `Comment ${code(
+                "/rollback"
+              )} to roll back to the previous successful ${code(
+                environment
+              )} deployment.`
+            ),
+          ]);
         }
 
         // Re-throw so that first deployment is marked as "error"
