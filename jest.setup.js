@@ -5,3 +5,4 @@ process.env['INPUT_SETUP'] = 'echo setup';
 process.env['INPUT_PRODUCTION-ENVIRONMENT'] = 'production';
 process.env['INPUT_PRE-PRODUCTION-ENVIRONMENT'] = 'pre-production';
 process.env['INPUT_WORKING-DIRECTORY'] = '';
+process.env['INPUT_ROLLBACK-ON-PRODUCTION-DEPLOYMENT-FAILURE'] = 'true';

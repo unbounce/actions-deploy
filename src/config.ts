@@ -18,4 +18,5 @@ export const config = {
   verifyCommand: input("verify"),
   setupCommand: input("setup"),
   workingDirectory: input("working-directory"),
+  autoRollback: input("rollback-on-production-deployment-failure") === "true",
 };
