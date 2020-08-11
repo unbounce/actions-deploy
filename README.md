@@ -52,6 +52,24 @@ jobs:
         deploy: make deploy # or: npm run deploy --environment "$ENVIRONMENT" --version "$VERSION"
         verify: make end-to-end-tests
 
+  # Notify user that comment has been seen
+  notification:
+    name: Notification
+    runs-on: ubuntu-latest
+    if: "!(github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/rollback')))"
+    steps:
+    - uses: actions/github-script@v2
+      if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${env.ACTIONS_DEPLOY_NAME}'))"
+      with:
+        github-token: ${{secrets.GITHUB_TOKEN}}
+        script: |
+          await github.reactions.createForIssueComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            comment_id: context.comment.id,
+            content: 'eyes'
+          });
+
   # Deployment tasks - this is where the actual deployment takes place
   # Runs on self-hosted runners so that it can have access to AWS resources for deployments
   deployment:
