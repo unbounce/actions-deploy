@@ -66,7 +66,7 @@ jobs:
           await github.reactions.createForIssueComment({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            comment_id: context.comment.id,
+            comment_id: context.payload.comment.id,
             content: 'eyes'
           });
 
