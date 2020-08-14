@@ -47,10 +47,6 @@ jobs:
     steps:
     - uses: unbounce/actions-deploy@master
       if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
-      with:
-        release: make release # or: npm run release
-        deploy: make deploy # or: npm run deploy --environment "$ENVIRONMENT" --version "$VERSION"
-        verify: make end-to-end-tests
 
   # Notify user that comment has been seen
   notification:
