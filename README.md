@@ -42,8 +42,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
-    # Should be inverse of `if` below
-    if: "(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/rollback'))))"
+    if: "(github.event_name == 'push' || (github.event_name == 'issue_comment' && (startsWith(github.event.comment.body, '/passed-qa') || startsWith(github.event.comment.body, '/failed-qa') || startsWith(github.event.comment.body, '/help'))))"
     steps:
     - uses: unbounce/actions-deploy@master
       if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
@@ -52,7 +51,7 @@ jobs:
   notification:
     name: Notification
     runs-on: ubuntu-latest
-    if: "!(github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/rollback')))"
+    if: "(github.event_name == 'issue_comment' && (startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/release') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/rollback')))"
     steps:
     - uses: actions/github-script@v2
       if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${env.ACTIONS_DEPLOY_NAME}'))"
@@ -74,8 +73,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
-    # Should be inverse of `if` above
-    if: "!(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/rollback'))))"
+    if: "!(github.event_name == 'push' || (github.event_name == 'issue_comment' && (startsWith(github.event.comment.body, '/passed-qa') || startsWith(github.event.comment.body, '/failed-qa') || startsWith(github.event.comment.body, '/help'))))"
     steps:
     - uses: actions/checkout@master
       if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
