@@ -166,3 +166,7 @@ This action can be configured via the `with` section with the following configur
 |`pre-production-environment`|No|`integration`||
 |`working-directory`|No|Root of repository|Directory to change into before running any commands, relative to root of repository root|
 |`rollback-on-production-deployment-failure`|No|`'true'`|Automatically roll back to the previous successful production deployment if `deploy` or `verify` commands fail
+
+### Releasing
+
+This repository uses [release-drafter](https://github.com/release-drafter/release-drafter). Once you have merged the pull requests that you would like to release, visit the [Releases](https://github.com/unbounce/actions-deploy/releases) section of the repository and publish the draft release.
