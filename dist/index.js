@@ -26639,7 +26639,7 @@ const handleQACommand = async (context, pr) => {
             await utils_1.handleError(comment, `I failed to bring ${pr.head.ref} up-to-date with ${pr.base.ref}. Please resolve conflicts before running ${comment_1.code("/qa")} again.`, e);
             return;
         }
-        const version = await git_1.getShortSha("HEAD");
+        const version = await git_1.getShortSha();
         await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
             try {
                 await release(comment, version);
@@ -26790,19 +26790,39 @@ const handleVerifyCommand = async (context, pr, providedEnvironment) => {
         // Handled in `verify`
     }
 };
-const handleDeployCommand = async (context, pr, providedEnvironment, providedVersion) => {
-    const environment = providedEnvironment || config_1.config.preProductionEnvironment;
-    const deployment = await utils_1.findLastDeploymentForPullRequest(context, config_1.config.preProductionEnvironment, pr.number);
+const handleReleaseCommand = async (context, pr) => {
     const comment = new comment_1.Comment(context, context.issue().number);
-    if (!deployment) {
-        await comment.append([
-            `Running ${comment_1.code(`/deploy`)}...`,
-            comment_1.warning(`I wasn't able to find the latest release for #${pr.number}`),
-        ]);
-        return;
-    }
+    await comment.append(`Running ${comment_1.code(`/release`)}...`);
     await git_1.checkoutPullRequest(pr);
-    const version = providedVersion || deployment.ref;
+    await setup(comment);
+    try {
+        const version = await git_1.getShortSha();
+        await release(comment, version);
+        await comment.append(comment_1.success("Done"));
+    }
+    catch (e) {
+        // Handled in `release`
+    }
+};
+const handleDeployCommand = async (context, pr, providedEnvironment, providedVersion) => {
+    let version;
+    const environment = providedEnvironment || config_1.config.preProductionEnvironment;
+    const comment = new comment_1.Comment(context, context.issue().number);
+    await git_1.checkoutPullRequest(pr);
+    if (providedVersion) {
+        version = providedVersion;
+    }
+    else {
+        const deployment = await utils_1.findLastDeploymentForPullRequest(context, config_1.config.preProductionEnvironment, pr.number);
+        if (!deployment) {
+            await comment.append([
+                `Running ${comment_1.code(`/deploy`)}...`,
+                comment_1.warning(`I wasn't able to find the latest release for #${pr.number}`),
+            ]);
+            return;
+        }
+        version = deployment.ref;
+    }
     await comment.append(`Running ${comment_1.code(`/deploy ${environment} ${version}`)}...`);
     await setup(comment);
     // Cross-notify if release came from another PR
@@ -26942,6 +26962,13 @@ const probot = (app) => {
                 await Promise.all([
                     utils_1.reactToComment(context, "eyes"),
                     handleVerifyCommand(context, pr.data, providedEnvironment),
+                ]);
+                break;
+            }
+            case utils_1.commandMatches(context, "release"): {
+                await Promise.all([
+                    utils_1.reactToComment(context, "eyes"),
+                    handleReleaseCommand(context, pr.data),
                 ]);
                 break;
             }
@@ -97222,7 +97249,7 @@ exports.updatePullRequest = async (pr) => {
         ]);
     }
 };
-exports.getShortSha = (revision) => shell_1.shellOutput(`git rev-parse --short ${revision}`).then((s) => s.toString().trim());
+exports.getShortSha = (revision = "HEAD") => shell_1.shellOutput(`git rev-parse --short ${revision}`).then((s) => s.toString().trim());
 
 
 /***/ }),
