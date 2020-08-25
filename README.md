@@ -42,8 +42,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
-    # Should be inverse of `if` below
-    if: "(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/rollback'))))"
+    if: "(github.event_name == 'push' || (github.event_name == 'issue_comment' && (startsWith(github.event.comment.body, '/passed-qa') || startsWith(github.event.comment.body, '/failed-qa') || startsWith(github.event.comment.body, '/help'))))"
     steps:
     - uses: unbounce/actions-deploy@master
       if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
@@ -52,7 +51,7 @@ jobs:
   notification:
     name: Notification
     runs-on: ubuntu-latest
-    if: "!(github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/rollback')))"
+    if: "(github.event_name == 'issue_comment' && (startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/release') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/rollback')))"
     steps:
     - uses: actions/github-script@v2
       if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${env.ACTIONS_DEPLOY_NAME}'))"
@@ -74,8 +73,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
-    # Should be inverse of `if` above
-    if: "!(github.event_name == 'push' || (github.event_name == 'issue_comment' && !(startsWith(github.event.comment.body, '/qa') || startsWith(github.event.comment.body, '/deploy') || startsWith(github.event.comment.body, '/verify') || startsWith(github.event.comment.body, '/rollback'))))"
+    if: "!(github.event_name == 'push' || (github.event_name == 'issue_comment' && (startsWith(github.event.comment.body, '/passed-qa') || startsWith(github.event.comment.body, '/failed-qa') || startsWith(github.event.comment.body, '/help'))))"
     steps:
     - uses: actions/checkout@master
       if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
@@ -148,8 +146,9 @@ Release and deployment automation is driven by commenting on the pull request.
 |`/qa`|Create a release, deploy it to the pre-production environment and run `verify` command|
 |`/passed-qa`|Set "QA" status check to "success"|
 |`/failed-qa`|Set "QA" status check to "failed"|
+|`/release` or <br/>`/release <environment>`|(Re-)create a release|
+|`/deploy` or <br/>`/deploy <environment>` or <br/>`/deploy <environment> <version>`|(Re-)deploy a release to an environment and run `verify` command - `/qa` or `/release` must have already been run on the pull request, or a release that matches the version must already exist (environment defaults to pre-production environment, version defaults to latest release for the pull request)|
 |`/verify` or <br/>`/verify <environment>`|(Re-)run `verify` command against an environment (environment defatuls to pre-production environment)|
-|`/deploy` or <br/>`/deploy <environment>` or <br/>`/deploy <environment> <version>`|(Re-)deploy a release to an environment and run `verify` command - `/qa` must have already been run on the pull request (environment defaults to pre-production environment, version defaults to latest release for the pull request)|
 |`/rollback`|If a pull request is the latest to be deployed to the production environment, this command will roll back the production environment to the previous version|
 |`/help`|Show help message|
 

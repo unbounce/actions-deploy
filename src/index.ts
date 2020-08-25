@@ -388,7 +388,7 @@ const handleQACommand = async (context: Context, pr: PullRequest) => {
       );
       return;
     }
-    const version = await getShortSha("HEAD");
+    const version = await getShortSha();
 
     await createDeploymentAndSetStatus(
       context,
@@ -641,32 +641,54 @@ const handleVerifyCommand = async (
   }
 };
 
+const handleReleaseCommand = async (context: Context, pr: PullRequest) => {
+  const comment = new Comment(context, context.issue().number);
+  await comment.append(`Running ${code(`/release`)}...`);
+
+  await checkoutPullRequest(pr);
+
+  await setup(comment);
+
+  try {
+    const version = await getShortSha();
+    await release(comment, version);
+    await comment.append(success("Done"));
+  } catch (e) {
+    // Handled in `release`
+  }
+};
+
 const handleDeployCommand = async (
   context: Context,
   pr: PullRequest,
   providedEnvironment?: string,
   providedVersion?: string
 ) => {
+  let version: string;
   const environment = providedEnvironment || config.preProductionEnvironment;
-  const deployment = await findLastDeploymentForPullRequest(
-    context,
-    config.preProductionEnvironment,
-    pr.number
-  );
-
   const comment = new Comment(context, context.issue().number);
-
-  if (!deployment) {
-    await comment.append([
-      `Running ${code(`/deploy`)}...`,
-      warning(`I wasn't able to find the latest release for #${pr.number}`),
-    ]);
-    return;
-  }
 
   await checkoutPullRequest(pr);
 
-  const version = providedVersion || deployment.ref;
+  if (providedVersion) {
+    version = providedVersion;
+  } else {
+    const deployment = await findLastDeploymentForPullRequest(
+      context,
+      config.preProductionEnvironment,
+      pr.number
+    );
+
+    if (!deployment) {
+      await comment.append([
+        `Running ${code(`/deploy`)}...`,
+        warning(`I wasn't able to find the latest release for #${pr.number}`),
+      ]);
+      return;
+    }
+
+    version = deployment.ref;
+  }
 
   await comment.append(
     `Running ${code(`/deploy ${environment} ${version}`)}...`
@@ -905,6 +927,14 @@ const probot = (app: Application) => {
         await Promise.all([
           reactToComment(context, "eyes"),
           handleVerifyCommand(context, pr.data, providedEnvironment),
+        ]);
+        break;
+      }
+
+      case commandMatches(context, "release"): {
+        await Promise.all([
+          reactToComment(context, "eyes"),
+          handleReleaseCommand(context, pr.data),
         ]);
         break;
       }
