@@ -2,3 +2,7 @@ template: |
   ## What's Changed
 
   $CHANGES
+
+  ## Upgrading
+
+  See README for any changes to the workflow configuration and update to have `uses: unbounce/actions-deploy@$RESOLVED_VERSION`
