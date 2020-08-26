@@ -22,7 +22,9 @@ on:
     # paths:
     #   - packages/my-component/**/*
   push:
-    branches: [master]
+    branches:
+      # This branch should match the "default" branch of your repository, typically "master" or "main"
+      - master
     # Scope to certain paths if more than one component in a repository uses the actions-deploy workflow
     # paths:
     #   - packages/my-component/**/*
@@ -95,6 +97,10 @@ commenting `/qa` will deploy the release to the production environment.
 ⚠️ It is recommended that the "QA" status check is required in [branch protection](https://help.github.com/en/github/administering-a-repository/about-protected-branches) for the main branch of the reposiory.
 
 ℹ️See also [docs/workflows.md](./docs/workflows.md).
+
+ℹ️Note that if the default branch of your repository is not `master`, the
+`on.push.branches` value in the above workflow should be changed to be the
+default branch (typically `main`).
 
 ### Multiple Components
 

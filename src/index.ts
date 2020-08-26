@@ -23,6 +23,7 @@ import {
   reactToComment,
   setCommitStatus,
   setDeploymentStatus,
+  prTargetsDefaultBranch,
 } from "./utils";
 import * as log from "./logging";
 import { shell, shellOutput, shellWithOutput } from "./shell";
@@ -309,6 +310,22 @@ const handlePrMerged = async (
     return;
   }
 
+  if (!prTargetsDefaultBranch(pr)) {
+    await comment.append(
+      warning(
+        `This pull request was deployed to ${code(
+          config.preProductionEnvironment
+        )} but does not target the default branch of the repository so it will not be automatically deployed to ${code(
+          config.productionEnvironment
+        )}.`
+      )
+    );
+
+    await resetPreProductionDeployment(context);
+
+    return;
+  }
+
   await comment.ephemeral(
     pending(mention(`Deploying to ${code(productionEnvironment)}...`))
   );
@@ -375,6 +392,17 @@ const handleQACommand = async (context: Context, pr: PullRequest) => {
     await checkoutPullRequest(pr);
     const comment = new Comment(context, context.issue().number);
     await comment.append(`Running ${code("/qa")}...`);
+
+    if (!prTargetsDefaultBranch(pr)) {
+      await comment.append(
+        warning(
+          `This pull request does not target the default branch of the repository so it will not be automatically deployed to ${code(
+            config.productionEnvironment
+          )} when merged.`
+        )
+      );
+    }
+
     await setup(comment);
     try {
       await updatePullRequest(pr);
