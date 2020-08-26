@@ -169,4 +169,12 @@ This action can be configured via the `with` section with the following configur
 
 ### Releasing
 
-This repository uses [release-drafter](https://github.com/release-drafter/release-drafter). Once you have merged the pull requests that you would like to release, visit the [Releases](https://github.com/unbounce/actions-deploy/releases) section of the repository and publish the draft release.
+This repository uses [release-drafter](https://github.com/release-drafter/release-drafter). Once you have merged the pull requests that you would like to release:
+
+1. Wait for the [release-drafter automation](https://github.com/unbounce/actions-deploy/actions?query=workflow%3A%22Release+Drafter%22) to complete
+1. Visit the [Releases](https://github.com/unbounce/actions-deploy/releases) section of the repository
+1. Click "Edit" on the `Draft` release
+1. Click "Publish release"
+1. :tada:
+
+The README will be [automatically updated](https://github.com/unbounce/actions-deploy/actions?query=workflow%3A%22Post+Release%22) with the newly released version.
