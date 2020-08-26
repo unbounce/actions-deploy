@@ -26593,6 +26593,10 @@ const handlePrMerged = async (context, pr) => {
         await comment.append(comment_1.error(comment_1.mention(`The ${utils_1.maybeComponentName()}${comment_1.code(preProductionEnvironment)} deployment resulted in ${comment_1.code(deploymentStatus || "unknown")} - not deploying to ${comment_1.code(productionEnvironment)}.`)));
         return;
     }
+    if (!utils_1.prTargetsDefaultBranch(pr)) {
+        await comment.append(comment_1.warning(`This pull request was deployed to ${comment_1.code(config_1.config.preProductionEnvironment)} but does not target the default branch of the repository so it will not be automatically deployed to ${comment_1.code(config_1.config.productionEnvironment)}.`));
+        return;
+    }
     await comment.ephemeral(comment_1.pending(comment_1.mention(`Deploying to ${comment_1.code(productionEnvironment)}...`)));
     await setup(comment);
     const version = deployment.ref;
@@ -26631,6 +26635,9 @@ const handleQACommand = async (context, pr) => {
         await git_1.checkoutPullRequest(pr);
         const comment = new comment_1.Comment(context, context.issue().number);
         await comment.append(`Running ${comment_1.code("/qa")}...`);
+        if (!utils_1.prTargetsDefaultBranch(pr)) {
+            await comment.append(comment_1.warning(`This pull request does not target the default branch of the repository so it will not be automatically deployed to ${comment_1.code(config_1.config.productionEnvironment)} when merged.`));
+        }
         await setup(comment);
         try {
             await git_1.updatePullRequest(pr);
@@ -37775,6 +37782,7 @@ exports.commandParameters = (context) => {
         return [];
     }
 };
+exports.prTargetsDefaultBranch = (pr) => pr.base.ref === pr.head.repo.default_branch;
 exports.reactToComment = async (context, content = "eyes") => {
     switch (context.event) {
         case "issue_comment":

@@ -58,6 +58,9 @@ export const commandParameters = (context: Context): string[] => {
   }
 };
 
+export const prTargetsDefaultBranch = (pr: PullRequest) =>
+  pr.base.ref === pr.head.repo.default_branch;
+
 export const reactToComment = async (
   context: Context,
   content: ReactionContent = "eyes"
