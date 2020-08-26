@@ -26595,6 +26595,7 @@ const handlePrMerged = async (context, pr) => {
     }
     if (!utils_1.prTargetsDefaultBranch(pr)) {
         await comment.append(comment_1.warning(`This pull request was deployed to ${comment_1.code(config_1.config.preProductionEnvironment)} but does not target the default branch of the repository so it will not be automatically deployed to ${comment_1.code(config_1.config.productionEnvironment)}.`));
+        await resetPreProductionDeployment(context);
         return;
     }
     await comment.ephemeral(comment_1.pending(comment_1.mention(`Deploying to ${comment_1.code(productionEnvironment)}...`)));

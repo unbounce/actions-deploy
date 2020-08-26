@@ -320,6 +320,9 @@ const handlePrMerged = async (
         )}.`
       )
     );
+
+    await resetPreProductionDeployment(context);
+
     return;
   }
 
