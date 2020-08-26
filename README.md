@@ -75,7 +75,7 @@ jobs:
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     if: "!(github.event_name == 'push' || (github.event_name == 'issue_comment' && (startsWith(github.event.comment.body, '/passed-qa') || startsWith(github.event.comment.body, '/failed-qa') || startsWith(github.event.comment.body, '/help'))))"
     steps:
-    - uses: actions/checkout@master
+    - uses: actions/checkout@v2
       if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
     - uses: unbounce/actions-deploy@v1.0.0
       if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
