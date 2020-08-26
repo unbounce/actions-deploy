@@ -523,6 +523,12 @@ const resetPreProductionDeployment = async (
   const version = prodDeployment.ref;
   const environment = preProductionEnvironment;
 
+  await comment.append(
+    `Resetting ${code(config.preProductionEnvironment)} to ${code(
+      config.productionEnvironment
+    )} version ${code(version)}...`
+  );
+
   await createDeploymentAndSetStatus(
     context,
     version,
