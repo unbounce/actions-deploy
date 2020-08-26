@@ -44,7 +44,7 @@ jobs:
       GEMFURY_TOKEN: ${{ secrets.GEMFURY_TOKEN }}
     if: "(github.event_name == 'push' || (github.event_name == 'issue_comment' && (startsWith(github.event.comment.body, '/passed-qa') || startsWith(github.event.comment.body, '/failed-qa') || startsWith(github.event.comment.body, '/help'))))"
     steps:
-    - uses: unbounce/actions-deploy@refs/tags/v1.6.0
+    - uses: unbounce/actions-deploy@v1.7.0
       if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
 
   # Notify user that comment has been seen
@@ -77,7 +77,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
       if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
-    - uses: unbounce/actions-deploy@refs/tags/v1.6.0
+    - uses: unbounce/actions-deploy@v1.7.0
       if: "(!env.ACTIONS_DEPLOY_NAME || github.event_name != 'issue_comment' || contains(github.event.issue.labels.*.name, 'actions-deploy/${{env.ACTIONS_DEPLOY_NAME}}'))"
       with:
         setup: make deps # or: npm ci
@@ -128,7 +128,7 @@ within a subdirectory of the repository - you can configure that with
 `working-directory`:
 
 ```
-    - uses: unbounce/actions-deploy@refs/tags/v1.6.0
+    - uses: unbounce/actions-deploy@v1.7.0
       with:
         working-directory: ./packages/my-component
 ```
