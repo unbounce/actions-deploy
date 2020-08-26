@@ -26727,6 +26727,7 @@ const resetPreProductionDeployment = async (context) => {
     const comment = new comment_1.Comment(context, context.issue().number);
     const version = prodDeployment.ref;
     const environment = preProductionEnvironment;
+    await comment.append(`Resetting ${comment_1.code(config_1.config.preProductionEnvironment)} to ${comment_1.code(config_1.config.productionEnvironment)} version ${comment_1.code(version)}...`);
     await createDeploymentAndSetStatus(context, version, environment, { pr: context.issue().number }, async () => {
         await deploy(comment, version, environment);
         await verify(comment, version, environment);
