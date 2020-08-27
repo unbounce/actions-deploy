@@ -750,7 +750,6 @@ const handleDeployCommand = async (
     environment,
     { pr: pr.number },
     async () => {
-      await release(comment, version);
       await deploy(comment, version, environment);
       await verify(comment, version, environment);
       await comment.append(success("Done"));
