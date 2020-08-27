@@ -26842,7 +26842,6 @@ const handleDeployCommand = async (context, pr, providedEnvironment, providedVer
         await comment_1.Comment.create(context, firstDeploymentPrNumber, otherPrMessage);
     }
     await createDeploymentAndSetStatus(context, version, environment, { pr: pr.number }, async () => {
-        await release(comment, version);
         await deploy(comment, version, environment);
         await verify(comment, version, environment);
         await comment.append(comment_1.success("Done"));
