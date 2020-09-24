@@ -85,7 +85,7 @@ jobs:
       with:
         setup: make deps # or: npm ci
         release: make release # or: npm run release
-        deploy: make deploy # or: npm run deploy --environment "$ENVIRONMENT" --version "$VERSION"
+        deploy: make deploy # or: npm run deploy -- --environment "$ENVIRONMENT" --version "$VERSION"
         verify: make end-to-end-tests # or: npm run end-to-end-tests
 ```
 
