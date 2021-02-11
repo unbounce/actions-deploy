@@ -1,3 +1,10 @@
+# :warning: OUT OF ORDER
+
+This workflow depends on self-hosted runners. We don't currently have self-hosted runners that can be easily linked to Github, or remembered by Github after being linked. Please talk to #eng-core about fixing [actions-runners](https://github.com/unbounce/ub-infrastructure/tree/master/actions-runners) if you want to resurrect this project.
+
+-----
+
+
 # :rocket: Actions Deploy :robot:
 
 GitHub Actions-based Release and Deployment.
